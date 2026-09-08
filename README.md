@@ -100,7 +100,18 @@ offprint-harness report   ~/papers/        # timing and block counts
 offprint-harness lines    paper.pdf        # line geometry, for debugging
 ```
 
-Measured on an M1 Pro, Fast tier: **0.015–0.13 s/page**.
+Measured on an M1 Pro, Fast tier:
+
+| Document | Pages | s/page | Tables | Figures |
+|---|---|---|---|---|
+| Two-column ML paper | 22 | 0.29 | 2 | 1 |
+| Springer journal article | 19 | 0.18 | 2 | 4 |
+| 99-page stakeholder registry | 99 | 0.58 | 201 | 27 |
+| Slide deck | 35 | 0.10 | 6 | 27 |
+| German working paper | 3 | 0.35 | 2 | 2 |
+
+Prose-only pages run at **0.04–0.15 s/page**. Pages that look tabular cost more,
+because they are handed to Vision for a real table read — see below.
 
 ## Notes from building it
 
@@ -116,6 +127,16 @@ Three things cost real time and are worth writing down:
 - **Vision can split a table down the wrong axis**, and the result is still valid
   Markdown — nothing downstream can detect it. Tables carry a `structureSuspect`
   flag, and the Markdown says so.
+- **Table columns are found by whitespace corridors, not by wide gaps.** A dense
+  results table sets its numeric columns barely wider than a word space, so a
+  gap-width threshold either merges them all or shreds justified prose into
+  cells. What separates the two is that a table's column boundary is empty on
+  *every* row, while the gaps in justified text land wherever the line breaks
+  put them.
+- **Section numbering beats typography for outlines.** Many styles mark a
+  subsection with its number alone, at body size and weight, so `3.2.1 Embedding
+  layer` is invisible to any size-based test — and the number also states the
+  nesting depth directly, which font size can only approximate.
 - **An ad-hoc signed app cannot use the App Sandbox.** Sandbox setup needs a team
   identity to anchor the container, so the app traps in `libsecinit` before
   `main()`. The sandbox is off until there is a Developer ID;

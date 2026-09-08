@@ -6,25 +6,47 @@ import PDFKit
 ///
 /// Order is rebuilt from per-character geometry rather than taken from
 /// `PDFPage.string`, whose ordering is unreliable on some documents. That costs a
-/// pass over the characters and buys correct multi-column output.
+/// pass over the glyphs and buys correct multi-column output.
 public struct TextLayerExtractor: Sendable {
 
-    public var displayBox: PDFDisplayBox
-    public init(displayBox: PDFDisplayBox = .cropBox) {
-        self.displayBox = displayBox
+    public struct Result: Sendable {
+        public var content: PageContent
+        /// Regions that look tabular, with their geometric cell grid.
+        ///
+        /// Vision has a trained table model and beats this reconstruction when it
+        /// fires, so the caller prefers Vision's answer. But a genuinely tabular
+        /// region that Vision declines to call a table must not fall back to one
+        /// giant paragraph, so the geometric grid is carried along as a floor.
+        public var tableCandidates: [TableDetector.Candidate]
     }
 
-    public func extract(page: PDFPage, pageIndex: Int) -> PageContent {
+    public var displayBox: PDFDisplayBox
+    public var tableConfiguration: TableDetector.Configuration
+
+    public init(displayBox: PDFDisplayBox = .cropBox,
+                tableConfiguration: TableDetector.Configuration = .init()) {
+        self.displayBox = displayBox
+        self.tableConfiguration = tableConfiguration
+    }
+
+    public func extract(page: PDFPage, pageIndex: Int) -> Result {
         let start = Date()
         let bounds = page.bounds(for: displayBox)
 
-        // `lines(of:)` already returns reading order — it resolves columns from
+        // `layout(of:)` already returns reading order — it resolves columns from
         // glyph geometry, which a later position-based sort would undo by
         // interleaving the columns back together.
-        let lines = TextLayerGeometry.lines(of: page, displayBox: displayBox)
-        let paragraphs = TextLayerGeometry.paragraphs(from: lines)
+        let layout = TextLayerGeometry.layout(of: page, displayBox: displayBox)
+        let lines = layout.lines
 
-        let candidates = paragraphs.map { paragraph in
+        let candidates = TableDetector.detect(lines: lines, glyphBoxes: layout.glyphBoxes,
+                                              configuration: tableConfiguration)
+
+        // Everything becomes prose here, including the tabular runs. If Vision
+        // later returns a real table for a region it replaces these blocks; if it
+        // does not, the text survives as paragraphs rather than vanishing.
+        let paragraphs = TextLayerGeometry.paragraphs(from: lines)
+        let headingCandidates = paragraphs.map { paragraph in
             HeadingHeuristic.Candidate(
                 text: paragraph.text,
                 bbox: paragraph.bbox,
@@ -33,7 +55,7 @@ public struct TextLayerExtractor: Sendable {
                 isBold: paragraph.lines.allSatisfy(\.isBold)
             )
         }
-        let classified = HeadingHeuristic.classify(candidates)
+        let classified = HeadingHeuristic.classify(headingCandidates)
 
         var blocks: [Block] = []
         for (index, paragraph) in paragraphs.enumerated() {
@@ -48,7 +70,7 @@ public struct TextLayerExtractor: Sendable {
             }
         }
 
-        return PageContent(
+        let content = PageContent(
             index: pageIndex,
             width: Double(bounds.width),
             height: Double(bounds.height),
@@ -56,5 +78,6 @@ public struct TextLayerExtractor: Sendable {
             engine: .textLayer,
             duration: Date().timeIntervalSince(start)
         )
+        return Result(content: content, tableCandidates: candidates)
     }
 }

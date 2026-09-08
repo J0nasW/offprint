@@ -28,14 +28,29 @@ public enum TextLayerGeometry {
         /// or descenders is visibly shorter than its neighbours in the same font,
         /// which reads as a size change and splits paragraphs mid-sentence.
         public var fontSize: Double
+        /// Runs of text on this line separated by gaps too wide to be word
+        /// spaces. On a table row these are the cells; on ordinary prose there
+        /// is exactly one.
+        public var segments: [Segment]
 
         public init(text: String, bbox: BoundingBox, column: Int = 0,
-                    fontSize: Double? = nil, isBold: Bool = false) {
+                    fontSize: Double? = nil, isBold: Bool = false,
+                    segments: [Segment] = []) {
             self.text = text
             self.bbox = bbox
             self.column = column
             self.fontSize = fontSize ?? bbox.height
             self.isBold = isBold
+            self.segments = segments
+        }
+    }
+
+    public struct Segment: Sendable, Hashable {
+        public var text: String
+        public var bbox: BoundingBox
+        public init(text: String, bbox: BoundingBox) {
+            self.text = text
+            self.bbox = bbox
         }
     }
 
@@ -76,20 +91,54 @@ public enum TextLayerGeometry {
         var box: BoundingBox
     }
 
-    /// Extracts lines in reading order, with top-left-origin page-point geometry.
+    /// Lines plus the glyph geometry behind them.
+    ///
+    /// Table detection needs raw glyph positions, not the merged segments: the
+    /// gaps between a table's numeric columns are often narrower than the
+    /// threshold that splits segments, so they are invisible once glyphs have
+    /// been merged.
+    public struct PageLayout: Sendable {
+        public var lines: [Line]
+        /// Glyph boxes for each line, in the same order as `lines`.
+        public var glyphBoxes: [[BoundingBox]]
+        public init(lines: [Line], glyphBoxes: [[BoundingBox]]) {
+            self.lines = lines
+            self.glyphBoxes = glyphBoxes
+        }
+    }
+
     public static func lines(of page: PDFPage, displayBox: PDFDisplayBox = .cropBox) -> [Line] {
+        layout(of: page, displayBox: displayBox).lines
+    }
+
+    /// Extracts lines in reading order, with top-left-origin page-point geometry.
+    public static func layout(of page: PDFPage, displayBox: PDFDisplayBox = .cropBox) -> PageLayout {
         let bounds = page.bounds(for: displayBox)
         let glyphs = self.glyphs(of: page, bounds: bounds)
-        guard !glyphs.isEmpty else { return [] }
+        guard !glyphs.isEmpty else { return PageLayout(lines: [], glyphBoxes: []) }
 
-        let ordered = layout(glyphs, pageWidth: Double(bounds.width),
-                             pageHeight: Double(bounds.height))
-        return ordered.compactMap { row in
+        let ordered = arrange(glyphs, pageWidth: Double(bounds.width),
+                              pageHeight: Double(bounds.height))
+        var lines: [Line] = []
+        var boxes: [[BoundingBox]] = []
+        for row in ordered {
             let read = self.read(in: row.box, of: page, bounds: bounds)
-            guard !read.text.isEmpty else { return nil }
-            return Line(text: read.text, bbox: row.box, column: row.column,
-                        fontSize: read.fontSize ?? row.fontSize, isBold: read.isBold)
+            guard !read.text.isEmpty else { continue }
+            let size = read.fontSize ?? row.fontSize
+            let splits = segmentBoxes(of: row.glyphs, fontSize: size)
+            // Only worth reading segments separately when the line actually
+            // splits; prose is one segment and would just cost a selection call.
+            let segments: [Segment] = splits.count > 1
+                ? splits.compactMap { box in
+                    let text = self.read(in: box, of: page, bounds: bounds).text
+                    return text.isEmpty ? nil : Segment(text: text, bbox: box)
+                }
+                : [Segment(text: read.text, bbox: row.box)]
+            lines.append(Line(text: read.text, bbox: row.box, column: row.column,
+                              fontSize: size, isBold: read.isBold, segments: segments))
+            boxes.append(row.glyphs.map { $0.box })
         }
+        return PageLayout(lines: lines, glyphBoxes: boxes)
     }
 
     static func glyphs(of page: PDFPage, bounds: CGRect) -> [Glyph] {
@@ -112,6 +161,12 @@ public enum TextLayerGeometry {
             )))
         }
         return glyphs
+    }
+
+    /// Reads just the text inside a rectangle. Used for table cells, where the
+    /// type size is not needed.
+    public static func text(in box: BoundingBox, of page: PDFPage, bounds: CGRect) -> String {
+        read(in: box, of: page, bounds: bounds).text
     }
 
     /// Reads the text PDFKit places inside a rectangle, and the type size it is set in.
@@ -165,6 +220,7 @@ public enum TextLayerGeometry {
         /// Column index, or -1 for a line that spans the full page width.
         var column: Int
         var fontSize: Double
+        var glyphs: [Glyph]
     }
 
     /// Turns loose glyph boxes into ordered rows, handling multi-column layouts.
@@ -173,11 +229,11 @@ public enum TextLayerGeometry {
     /// cannot simply split the page down the middle: full-width lines are kept
     /// whole and act as section breaks, and within each section the left column
     /// is read before the right.
-    static func layout(_ glyphs: [Glyph], pageWidth: Double, pageHeight: Double) -> [Row] {
+    static func arrange(_ glyphs: [Glyph], pageWidth: Double, pageHeight: Double) -> [Row] {
         let median = medianHeight(glyphs.map(\.box))
 
         guard let gutter = columnGutter(glyphs, pageWidth: pageWidth, pageHeight: pageHeight) else {
-            return rows(of: glyphs, median: median).map { Row(box: box(of: $0), column: 0, fontSize: fontSize(of: $0)) }
+            return rows(of: glyphs, median: median).map { Row(box: box(of: $0), column: 0, fontSize: fontSize(of: $0), glyphs: $0) }
         }
 
         // Classify each row as full-width or column content.
@@ -203,11 +259,11 @@ public enum TextLayerGeometry {
         // Columns are re-clustered independently, so a tall left-column line can
         // never chain through the right column into the line below it.
         let leftRows  = rows(of: columnar.filter { $0.box.midX <  gutter.center }, median: median)
-            .map { Row(box: box(of: $0), column: 0, fontSize: fontSize(of: $0)) }
+            .map { Row(box: box(of: $0), column: 0, fontSize: fontSize(of: $0), glyphs: $0) }
         let rightRows = rows(of: columnar.filter { $0.box.midX >= gutter.center }, median: median)
-            .map { Row(box: box(of: $0), column: 1, fontSize: fontSize(of: $0)) }
+            .map { Row(box: box(of: $0), column: 1, fontSize: fontSize(of: $0), glyphs: $0) }
         let fullRows  = rows(of: fullWidth, median: median)
-            .map { Row(box: box(of: $0), column: -1, fontSize: fontSize(of: $0)) }
+            .map { Row(box: box(of: $0), column: -1, fontSize: fontSize(of: $0), glyphs: $0) }
             .sorted { $0.box.minY < $1.box.minY }
 
         // Emit section by section.
@@ -290,15 +346,20 @@ public enum TextLayerGeometry {
             best = (xi, crossings[xi])
         }
         guard let found = best else { return nil }
-        // A single-column page has text crossing its midline on essentially
-        // every occupied strip (~95%); a two-column page crosses the gutter only
-        // where a full-width title or figure sits. The gap between those two
-        // regimes is wide, so the threshold sits well clear of both.
-        guard Double(found.crossings) < Double(textStrips) * 0.35 else { return nil }
+        // A single-column page has text crossing its midline on essentially every
+        // occupied strip (~95%); a two-column page crosses the gutter only where
+        // a full-width element sits. Those elements can be large — a page with
+        // two wide results tables plus a title crosses on half its height — so
+        // the threshold has to be generous. It can afford to be: the gap between
+        // "about half" and "essentially all" is still wide.
+        guard Double(found.crossings) < Double(textStrips) * 0.55 else { return nil }
 
-        // Measure how wide the empty band actually is by walking outwards while
-        // the strip count stays near the minimum.
-        let ceiling = max(found.crossings + 1, Int(Double(textStrips) * 0.35))
+        // Measure how wide the genuinely empty band is by walking outwards only
+        // while coverage stays at the minimum. Using the acceptance threshold
+        // here instead would walk deep into the text on either side and report a
+        // gutter several times its real width — which then makes two column lines
+        // look like one continuous full-width line.
+        let ceiling = found.crossings + 1
         var lo = found.index, hi = found.index
         while lo > 0, crossings[lo - 1] < ceiling { lo -= 1 }
         while hi < samples - 1, crossings[hi + 1] < ceiling { hi += 1 }
@@ -336,6 +397,31 @@ public enum TextLayerGeometry {
                 out.append(current)
                 current = [glyph]
                 box = glyph.box
+            }
+        }
+        out.append(current)
+        return out
+    }
+
+    /// Splits a row wherever the gap between glyphs is too wide to be a word space.
+    ///
+    /// A word space runs about a quarter of the type size; anything past ~1.2x is
+    /// a deliberate horizontal separation. Table columns are *not* found this
+    /// way — a dense results table sets its numeric columns barely wider than a
+    /// space — they come from vertical whitespace corridors instead.
+    static func segmentBoxes(of glyphs: [Glyph], fontSize: Double) -> [BoundingBox] {
+        guard !glyphs.isEmpty, fontSize > 0 else { return [] }
+        let ordered = glyphs.sorted { $0.box.minX < $1.box.minX }
+        let minimumGap = fontSize * 1.2
+
+        var out: [BoundingBox] = []
+        var current = ordered[0].box
+        for glyph in ordered.dropFirst() {
+            if glyph.box.minX - current.maxX > minimumGap {
+                out.append(current)
+                current = glyph.box
+            } else {
+                current = current.union(glyph.box)
             }
         }
         out.append(current)
@@ -397,7 +483,11 @@ public enum TextLayerGeometry {
             let sizeChange = max(line.fontSize, previous.fontSize)
                            > min(line.fontSize, previous.fontSize) * 1.25
                           || line.isBold != previous.isBold
-            if bigGap || columnBreak || indented || sizeChange { flush() }
+            // A numbered section title set in the body face is invisible to
+            // every other test here, and merging it into the paragraph below
+            // loses the heading entirely.
+            let startsSection = HeadingHeuristic.sectionDepth(of: line.text) != nil
+            if bigGap || columnBreak || indented || sizeChange || startsSection { flush() }
             current.append(line)
         }
         flush()

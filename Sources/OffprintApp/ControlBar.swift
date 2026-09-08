@@ -51,7 +51,7 @@ struct ControlBar: View {
     static func cost(of tier: QualityTier) -> String {
         switch tier {
         case .fast:
-            return "≈0.1 s/page · no download"
+            return "0.04–0.6 s/page · no download"
         case .balanced:
             return "GLM-OCR · 1.25 GB download"
         case .best:

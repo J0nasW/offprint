@@ -93,6 +93,16 @@ public enum HeadingHeuristic {
         guard text.count >= 2 else { return false }
         // Sentence-ending punctuation is strong evidence of prose.
         if text.hasSuffix(".") && text.count > 60 { return false }
+
+        // A numbered section title is a heading however it is set. Some styles
+        // distinguish subsections by weight alone, or by nothing beyond the
+        // number itself — and those are exactly the headings a size test misses.
+        if c.lineCount == 1, text.count <= 90, sectionDepth(of: text) != nil,
+           let first = text.drop(while: { !$0.isWhitespace })
+                           .drop(while: { $0.isWhitespace }).first,
+           first.isUppercase {
+            return true
+        }
         // Either visibly larger, or set in bold at no less than body size —
         // the two ways a heading distinguishes itself typographically.
         // Academic styles often set section headings just one point above the
@@ -126,16 +136,67 @@ extension HeadingHeuristic {
         let tiers = clusterSizes(sizes)
         guard tiers.count > 1 else { return pages }
 
+        // A document that numbers its sections has already declared its own
+        // outline. "3.2 Results" is unambiguously one level below "3 Method",
+        // whatever the type sizes happen to be — and numbering survives styles
+        // where every heading is set at the same size.
+        let numbered = pages.flatMap(\.blocks).contains { block in
+            guard case .heading(let heading) = block else { return false }
+            return sectionDepth(of: heading.text) != nil
+        }
+        // Numbered sections sit under the document title when there is one.
+        let offset = numbered && tiers.count > 1 ? 1 : 0
+
         return pages.map { page in
             var page = page
             page.blocks = page.blocks.map { block in
-                guard case .heading(var heading) = block, let size = heading.fontSize,
-                      size > 0 else { return block }
-                heading.level = min(level(for: size, in: tiers), 6)
+                guard case .heading(var heading) = block else { return block }
+                if let depth = sectionDepth(of: heading.text) {
+                    heading.level = min(depth + offset, 6)
+                } else if let size = heading.fontSize, size > 0 {
+                    heading.level = min(level(for: size, in: tiers), 6)
+                }
                 return .heading(heading)
             }
             return page
         }
+    }
+
+    /// Depth of a heading's section number, or nil when it has none.
+    ///
+    /// Recognises `2`, `3.1`, `4.2.1` and appendix forms like `A` or `B.2`, each
+    /// followed by an actual title — a bare number is a page number, and a line
+    /// starting with a year or a citation is prose.
+    public static func sectionDepth(of text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard let separator = trimmed.firstIndex(where: { $0 == " " || $0 == "\t" }) else {
+            return nil
+        }
+        var label = String(trimmed[trimmed.startIndex..<separator])
+        if label.hasSuffix(".") { label.removeLast() }
+        guard !label.isEmpty else { return nil }
+
+        // There must be a real title after the number.
+        let rest = trimmed[trimmed.index(after: separator)...]
+            .trimmingCharacters(in: .whitespaces)
+        guard rest.count >= 2, rest.contains(where: \.isLetter) else { return nil }
+
+        let parts = label.split(separator: ".", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.count <= 4 else { return nil }
+
+        for (index, part) in parts.enumerated() {
+            if part.allSatisfy(\.isNumber), !part.isEmpty {
+                // A four-digit leading number is a year, not a section.
+                if index == 0, part.count > 2 { return nil }
+                continue
+            }
+            // A single capital letter is an appendix, but only in first position.
+            if index == 0, part.count == 1, part.first!.isUppercase, part.first!.isLetter {
+                continue
+            }
+            return nil
+        }
+        return parts.count
     }
 
     /// Groups measured sizes into distinct typographic tiers, largest first.

@@ -128,11 +128,16 @@ public actor ConversionEngine {
 
             var content: PageContent
             if useTextLayer {
-                content = textExtractor.extract(page: page, pageIndex: index)
+                let result = textExtractor.extract(page: page, pageIndex: index)
+                content = result.content
                 // A text layer that yields nothing is worse than no text layer;
                 // fall through to OCR rather than emitting an empty page.
                 if content.blocks.isEmpty {
                     content = try await ocr(page: page, index: index, renderer: renderer)
+                } else if !result.tableCandidates.isEmpty {
+                    content = try await addTables(to: content, candidates: result.tableCandidates,
+                                                  page: page, index: index, renderer: renderer,
+                                                  displayBox: options.displayBox)
                 }
             } else {
                 content = try await ocr(page: page, index: index, renderer: renderer)
@@ -157,6 +162,69 @@ public actor ConversionEngine {
                           appVersion: options.appVersion),
             pages: pages
         )
+    }
+
+    /// Replaces tabular prose with real tables read by Vision.
+    ///
+    /// The text layer knows exactly where every glyph sits but has no concept of
+    /// a cell, and reconstructing one from whitespace alone gets dense numeric
+    /// tables wrong. Vision has a trained table model, so the cheap geometric
+    /// detector is used only to decide *which pages are worth showing it* —
+    /// tables are rare, and this is the only thing that costs a render.
+    private func addTables(to content: PageContent, candidates: [TableDetector.Candidate],
+                           page: PDFPage, index: Int, renderer: PDFRenderer,
+                           displayBox: PDFDisplayBox) async throws -> PageContent {
+        // Rendered at the engine's normal density. Denser is measurably worse:
+        // at 220 dpi Vision found no tables at all on documents where 150 dpi
+        // found six, so the table model clearly expects roughly this scale.
+        let image = try renderer.render(page)
+        let size = CGSize(width: content.width, height: content.height)
+        let vision = try await VisionExtractor().extract(image: image, pageSize: size,
+                                                         pageIndex: index)
+
+        let visionTables = vision.blocks.filter { block in
+            if case .table = block, block.bbox != nil { return true }
+            return false
+        }
+
+        // One table per suspected region: Vision's if it found one there, the
+        // geometric grid otherwise.
+        let bounds = page.bounds(for: displayBox)
+        var tables: [Block] = []
+        for candidate in candidates {
+            let match = visionTables.first { table in
+                guard let box = table.bbox else { return false }
+                return candidate.bbox.coverage(by: box) > 0.3 || box.coverage(by: candidate.bbox) > 0.3
+            }
+            if let match {
+                tables.append(match)
+            } else {
+                let rows = candidate.cells.map { row in
+                    row.map { cell in
+                        Block.Table.Cell(
+                            text: TextLayerGeometry.text(in: cell, of: page, bounds: bounds))
+                    }
+                }
+                guard rows.contains(where: { $0.contains { !$0.text.isEmpty } }) else { continue }
+                // Flagged: this grid came from whitespace alone, with no table
+                // model confirming it.
+                tables.append(.table(.init(rows: rows, bbox: candidate.bbox,
+                                           structureSuspect: true)))
+            }
+        }
+        guard !tables.isEmpty else { return content }
+
+        let claimed = tables.compactMap(\.bbox)
+        var blocks = content.blocks.filter { block in
+            guard let box = block.bbox else { return true }
+            return !claimed.contains { box.coverage(by: $0) > 0.5 }
+        }
+        blocks += tables
+
+        var content = content
+        content.blocks = ReadingOrder.sort(blocks, pageWidth: content.width) { $0.bbox }
+        content.engine = .vision
+        return content
     }
 
     private func ocr(page: PDFPage, index: Int, renderer: PDFRenderer) async throws -> PageContent {

@@ -43,7 +43,7 @@
   a { color: var(--accent); }
 
   header { padding: 88px 0 56px; text-align: center; }
-  .mark { font-size: 44px; line-height: 1; }
+  .mark { display: block; margin: 0 auto; border-radius: 20px; width: 88px; height: 88px; }
   h1 {
     font-size: clamp(38px, 7vw, 60px);
     letter-spacing: -0.03em;
@@ -114,7 +114,7 @@
 <body>
 
 <header class="wrap">
-  <div class="mark">📄</div>
+  <img class="mark" src="icon.png" alt="" width="88" height="88">
   <h1>Offprint</h1>
   <p class="tagline">PDFs become clean Markdown. On your Mac, not someone's server.</p>
 
@@ -170,7 +170,7 @@
       <tr>
         <td>Fast</td>
         <td>The PDF's own text layer, with Apple Vision for scanned pages</td>
-        <td>0.015–0.13 s/page</td>
+        <td>0.04–0.6 s/page</td>
         <td>none</td>
       </tr>
       <tr>
@@ -188,6 +188,8 @@
     </table>
     <p class="note">
       Speeds are measured on an M1&nbsp;Pro by the project's own harness, not estimated.
+      Prose-only pages sit at the fast end; pages holding tables cost more, because
+      they get a real table read rather than a guess.
       Balanced and Best share one download — the difference is compute, not disk.
       Fast needs no network at all.
     </p>

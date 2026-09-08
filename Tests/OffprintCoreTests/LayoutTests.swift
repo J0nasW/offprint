@@ -249,3 +249,65 @@ struct TableSuspicionTests {
         #expect(VisionExtractor.isStructureSuspect(ragged))
     }
 }
+
+@Suite("Section numbering")
+struct SectionNumberingTests {
+
+    @Test("Numbered section titles report their depth")
+    func readsDepth() {
+        #expect(HeadingHeuristic.sectionDepth(of: "1 Introduction") == 1)
+        #expect(HeadingHeuristic.sectionDepth(of: "3.1 Task definition") == 2)
+        #expect(HeadingHeuristic.sectionDepth(of: "3.2.1 Embedding layer") == 3)
+        #expect(HeadingHeuristic.sectionDepth(of: "2. Related work") == 1)
+        // Appendices.
+        #expect(HeadingHeuristic.sectionDepth(of: "A Training Settings") == 1)
+        #expect(HeadingHeuristic.sectionDepth(of: "B.2 Ablations") == 2)
+    }
+
+    @Test("Prose that merely starts with a number is not a section")
+    func rejectsProse() {
+        // A bibliography year.
+        #expect(HeadingHeuristic.sectionDepth(of: "2024 Smith et al. report that") == nil)
+        // A bare number is a page number.
+        #expect(HeadingHeuristic.sectionDepth(of: "2536") == nil)
+        // Nothing after the number.
+        #expect(HeadingHeuristic.sectionDepth(of: "3.1 ") == nil)
+        // Too deep to be a real section.
+        #expect(HeadingHeuristic.sectionDepth(of: "1.2.3.4.5 Something") == nil)
+        #expect(HeadingHeuristic.sectionDepth(of: "Introduction") == nil)
+    }
+
+    @Test("A numbered subsection is a heading even at body size and weight")
+    func detectsUnstyledSubsections() {
+        // The case that motivates this: styles that mark a subsection with the
+        // number alone, where every size- and weight-based test fails.
+        let body = HeadingHeuristic.Candidate(
+            text: "Ordinary paragraph text that continues for a while.",
+            bbox: .init(x: 0, y: 0, width: 300, height: 40), lineCount: 4, fontSize: 10)
+        let subsection = HeadingHeuristic.Candidate(
+            text: "3.1 Task definition",
+            bbox: .init(x: 0, y: 0, width: 100, height: 10), lineCount: 1, fontSize: 10)
+
+        let result = HeadingHeuristic.classify([subsection, body])
+        #expect(result[0] != .paragraph)
+        #expect(result[1] == .paragraph)
+    }
+
+    @Test("Numbering sets the level, so the outline nests consistently")
+    func numberingDrivesLevels() throws {
+        let pages = [PageContent(index: 0, width: 600, height: 800, blocks: [
+            .heading(.init(level: 1, text: "Paper Title", fontSize: 20)),
+            .heading(.init(level: 1, text: "3 Methodology", fontSize: 12)),
+            .heading(.init(level: 1, text: "3.1 Task definition", fontSize: 10)),
+            .heading(.init(level: 1, text: "3.2.1 Embedding layer", fontSize: 10)),
+        ], engine: .textLayer)]
+
+        let out = HeadingHeuristic.normalizeLevels(pages)
+        let levels = out[0].blocks.compactMap { block -> Int? in
+            guard case .heading(let heading) = block else { return nil }
+            return heading.level
+        }
+        // Title stays on top; numbered sections nest one level beneath it.
+        #expect(levels == [1, 2, 3, 4])
+    }
+}

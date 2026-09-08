@@ -37,8 +37,8 @@ as one thing gets half of it wrong.
 | Tier | Pipeline | Download |
 |---|---|---|
 | **Fast** | Embedded text layer where it is trustworthy, Apple Vision where it is not | none |
-| **Balanced** | GLM-OCR full page for anything the text layer cannot describe | 1.25 GB |
-| **Best** | Vision locates regions, GLM-OCR reads each with the matching task prompt | same 1.25 GB |
+| **Balanced** | GLM-OCR reads anything the text layer cannot describe | 1.25 GB |
+| **Best** | GLM-OCR reads every page, text layer or not | same 1.25 GB |
 
 The idea the design turns on: **Apple's Vision framework supplies layout, GLM-OCR
 supplies recognition.** GLM-OCR was built to sit behind a layout detector rather
@@ -102,6 +102,33 @@ window:
 The token figure is labelled an estimate because that is what it is: an exact
 count is exact for exactly one tokenizer, and models disagree.
 
+## For retrieval
+
+Chunking by a fixed window is what makes retrieval brittle. A paragraph lifted
+out of a 125-page report says almost nothing on its own, and a chunk that
+straddles a section boundary answers questions about neither section.
+
+So chunks are cut **by section first**, then by size within a section. Each one
+carries the breadcrumb trail of its section, its position in it, and links to its
+neighbours — enough for an agent to know what it is holding, whether it is
+holding all of it, and where to look next.
+
+```json
+{ "id": 6, "sectionID": "3.1", "partIndex": 1, "partCount": 2,
+  "headingPath": ["Defining Artificial Intelligence 2.0", "Foreword"],
+  "pages": [5], "estimatedTokens": 491, "previousID": 5, "nextID": 7 }
+```
+
+An `.outline.json` ships alongside: the section tree with token counts and the
+chunk ids under each heading, so an agent can *look at the structure and choose
+what to read* rather than embedding everything and hoping similarity finds it.
+
+```
+3   Defining Artificial Intelligence 2.0   [4 chunks]
+  3.1 Foreword                             [2 chunks]
+  3.3 Abstract                             [2 chunks]
+```
+
 ## Scripting
 
 The app doubles as its own CLI, which is also how the model tiers are measured:
@@ -115,7 +142,7 @@ Offprint.app/Contents/MacOS/Offprint --convert paper.pdf --tier balanced --json 
 Quality and speed are measured before they are promised anywhere in the UI.
 
 ```bash
-offprint-harness convert  paper.pdf --json -o out/
+offprint-harness convert  paper.pdf --json --chunks -o out/
 offprint-harness classify paper.pdf        # per-page routing decision
 offprint-harness report   ~/papers/        # timing and block counts
 offprint-harness lines    paper.pdf        # line geometry, for debugging
@@ -171,7 +198,8 @@ Three things cost real time and are worth writing down:
 - [x] Table of contents, bullet lists, word/character/token counts
 - [x] SwiftUI app: drop zone, queue, quality slider, live preview
 - [x] Release pipeline, Homebrew cask, landing page
-- [x] GLM-OCR via MLX Swift — wired up, not yet measured on real documents
+- [x] GLM-OCR via MLX Swift — **4.3 s/page** measured on an M1 Pro
+- [x] Section-aware chunking and a navigable outline, for retrieval
 - [ ] MCP server, so an agent on this Mac can convert a PDF on demand
 - [ ] Notarised builds (needs an Apple Developer Program membership)
 

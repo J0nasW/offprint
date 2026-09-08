@@ -176,13 +176,13 @@
       <tr>
         <td>Balanced</td>
         <td>GLM-OCR reads whatever the text layer can't describe</td>
-        <td>measured at release</td>
+        <td>~4.3 s/page</td>
         <td>1.25 GB</td>
       </tr>
       <tr>
         <td>Best</td>
         <td>Vision finds the regions, GLM-OCR reads each one</td>
-        <td>measured at release</td>
+        <td>~4.3 s/page, every page</td>
         <td>same model</td>
       </tr>
     </table>
@@ -231,6 +231,14 @@
       <div>
         <h3>Every page routed on its own</h3>
         <p>A digital report with scanned appendices gets both halves right.</p>
+      </div>
+      <div>
+        <h3>Built for feeding models</h3>
+        <p>Word, character and token counts, plus chunks cut by section that carry their heading trail — not a fixed window that cuts sentences in half.</p>
+      </div>
+      <div>
+        <h3>Contents pages become outlines</h3>
+        <p>A table of contents is a nested list of pointers, not a table, and it comes out as one.</p>
       </div>
     </div>
   </section>

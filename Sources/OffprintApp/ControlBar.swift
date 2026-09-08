@@ -53,9 +53,9 @@ struct ControlBar: View {
         case .fast:
             return "0.04–0.6 s/page · no download"
         case .balanced:
-            return "GLM-OCR · 1.25 GB download"
+            return "~4.3 s/page · GLM-OCR · 1.25 GB download"
         case .best:
-            return "GLM-OCR per region · 1.25 GB download"
+            return "~4.3 s/page, every page · GLM-OCR · 1.25 GB download"
         }
     }
 
@@ -74,7 +74,9 @@ struct ControlBar: View {
             defer { exporting = false }
             do {
                 let exporter = DocumentExporter(options: .init(
-                    writeJSON: true, writeFigures: library.extractFigures))
+                    writeJSON: true,
+                    writeChunks: library.exportChunks,
+                    writeFigures: library.extractFigures))
                 let result = try exporter.export(document, source: job.url, to: directory)
                 if let markdown = result.markdownURL {
                     NSWorkspace.shared.activateFileViewerSelecting([markdown])

@@ -11,6 +11,7 @@ struct Arguments {
     var tier: QualityTier = .fast
     var output: URL?
     var json = false
+    var chunks = false
     var pageMarkers = false
     var noFigures = false
     var forceOCR = false
@@ -35,6 +36,7 @@ func parse() -> Arguments {
         case "--out", "-o":
             if let v = value() { a.output = URL(filePath: v); i += 1 }
         case "--json": a.json = true
+        case "--chunks": a.chunks = true
         case "--page-markers": a.pageMarkers = true
         case "--no-figures": a.noFigures = true
         case "--force-ocr": a.forceOCR = true
@@ -63,6 +65,7 @@ OPTIONS
   -t, --tier      Quality tier (default: fast)
   -o, --out       Output directory (default: ./Fixtures/out)
       --json      Also write JSON alongside the Markdown
+      --chunks    Also write <name>.chunks.jsonl for retrieval pipelines
       --page-markers   Emit <!-- page N --> comments
       --no-figures     Skip figure detection
       --force-ocr      Ignore the text layer; send every page to the OCR engine
@@ -200,6 +203,7 @@ default:  // convert
             let document = try await engine.document(for: pdf, options: options)
             let exporter = DocumentExporter(options: .init(
                 writeJSON: args.json,
+                writeChunks: args.chunks,
                 writeFigures: !args.noFigures,
                 markdown: .init(pageMarkers: args.pageMarkers)))
             let result = try exporter.export(document, source: pdf, to: outputRoot)

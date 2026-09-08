@@ -47,6 +47,8 @@ final class ConversionLibrary {
     var selection: Job.ID?
     var tier: QualityTier = .fast
     var extractFigures = true
+    /// Writes `.chunks.jsonl` and `.outline.json` for retrieval pipelines.
+    var exportChunks = false
     var isRunning = false
 
     /// Which model the paid-in-disk tiers use.

@@ -8,7 +8,14 @@ public struct PageClassifier: Sendable {
     public struct Thresholds: Sendable {
         /// Characters per 1000 pt² below which a page is treated as having no
         /// meaningful text layer. A dense A4 page of prose sits around 6.
-        public var minimumCharacterDensity: Double = 0.4
+        ///
+        /// Deliberately near zero rather than merely low. A cover page or a
+        /// section divider has a sparse but perfectly good text layer, and
+        /// sending it to OCR instead reads the artwork — a title page's logos and
+        /// stylised lettering come back as headings and pollute the outline of
+        /// the whole document. Genuinely scanned pages have no text layer at all,
+        /// or a garbled one, and both are caught separately.
+        public var minimumCharacterDensity: Double = 0.08
         /// Share of characters that may look like broken encoding before the
         /// text layer is rejected outright.
         public var maximumGarbledRatio: Double = 0.04

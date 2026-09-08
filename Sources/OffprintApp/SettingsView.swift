@@ -17,6 +17,11 @@ struct SettingsView: View {
                 Text("Figures are cropped from the page and saved next to the Markdown.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle("Export chunks for retrieval", isOn: $library.exportChunks)
+                Text("Writes .chunks.jsonl and .outline.json. Chunks are cut by section, carry their heading trail and position, and link to their neighbours.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Models") {

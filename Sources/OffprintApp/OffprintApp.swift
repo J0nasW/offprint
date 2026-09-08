@@ -8,6 +8,19 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let didOpen = Notification.Name("OffprintDidOpenFiles")
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // No Dock icon, no menu bar, no window for a `--convert` run.
+        if Headless.isRequested { NSApp.setActivationPolicy(.prohibited) }
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Headless work is started here rather than from App.init: almost
+        // everything in this target is MainActor-isolated by default, so
+        // blocking the main thread to wait for it deadlocks instead of running.
+        guard Headless.isRequested else { return }
+        Task { await Headless.run() }
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         NotificationCenter.default.post(name: Self.didOpen, object: nil,
                                         userInfo: ["urls": urls])
@@ -20,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct OffprintApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var library = ConversionLibrary()
+
 
     var body: some Scene {
         Window("Offprint", id: "main") {

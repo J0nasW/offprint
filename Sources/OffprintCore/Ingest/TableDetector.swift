@@ -29,11 +29,15 @@ public enum TableDetector {
     public struct Configuration: Sendable {
         /// Narrowest corridor that counts as a column boundary, as a multiple of
         /// the type size.
-        public var minimumCorridor: Double = 0.45
+        ///
+        /// Justified prose stretches its word spaces, and a stretched space can
+        /// reach roughly 0.7x the type size — so anything below that shreds
+        /// paragraphs into cells. Column gaps are wider than that by design.
+        public var minimumCorridor: Double = 0.9
         /// Largest vertical gap between consecutive rows of one table, as a
         /// multiple of the type size.
         public var maximumRowGap: Double = 2.0
-        public var minimumRows: Int = 2
+        public var minimumRows: Int = 3
         public var minimumColumns: Int = 2
         /// Share of rows that must reach into more than one column.
         public var rowSupport: Double = 0.6
@@ -170,10 +174,11 @@ public enum TableDetector {
         edges.append((start, maxX))
         guard edges.count >= configuration.minimumColumns else { return nil }
 
-        // A two-by-two grid is too weak a signal on its own: a heading above a
-        // short indented line produces one by accident. Ask for more of one
-        // dimension or the other.
-        guard rows.count >= 3 || edges.count >= 3 else { return nil }
+        // Three rows minimum, with no escape for extra columns. Two lines of
+        // justified prose land their stretched spaces at the same few x often
+        // enough to fake a wide grid, and shredding a paragraph into cells is a
+        // far worse failure than missing a rare two-row table.
+        guard rows.count >= 3 else { return nil }
 
         // Most rows must actually span more than one column, or this is a list
         // with a hanging indent rather than a table.

@@ -89,6 +89,27 @@ The engine splits into `OffprintCore` (no MLX — models, layout, serialisers) a
 once the model tiers land, `OffprintML`. Everything valuable is in Core, so most
 of the project stays testable with a plain fast `swift test`.
 
+## Counts
+
+Extraction is usually a step on the way to a model, so the numbers that decide
+whether output fits a context window ship with it — in the JSON, and in the
+window:
+
+```
+41,096 words · 285,085 chars · ~63,708 tokens · 55 tables
+```
+
+The token figure is labelled an estimate because that is what it is: an exact
+count is exact for exactly one tokenizer, and models disagree.
+
+## Scripting
+
+The app doubles as its own CLI, which is also how the model tiers are measured:
+
+```sh
+Offprint.app/Contents/MacOS/Offprint --convert paper.pdf --tier balanced --json --out ./out
+```
+
 ## The harness
 
 Quality and speed are measured before they are promised anywhere in the UI.
@@ -147,9 +168,11 @@ Three things cost real time and are worth writing down:
 - [x] Block model, Markdown + JSON serialisers, figure extraction
 - [x] Text-layer engine with column-aware reading order
 - [x] Apple Vision engine (tables, lists, headings)
+- [x] Table of contents, bullet lists, word/character/token counts
 - [x] SwiftUI app: drop zone, queue, quality slider, live preview
 - [x] Release pipeline, Homebrew cask, landing page
-- [ ] GLM-OCR via MLX Swift (Balanced and Best tiers)
+- [x] GLM-OCR via MLX Swift — wired up, not yet measured on real documents
+- [ ] MCP server, so an agent on this Mac can convert a PDF on demand
 - [ ] Notarised builds (needs an Apple Developer Program membership)
 
 ## Licence

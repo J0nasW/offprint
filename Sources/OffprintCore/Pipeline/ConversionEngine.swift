@@ -146,6 +146,7 @@ public actor ConversionEngine {
             if options.extractFigures {
                 content.blocks = try figures(for: page, content: content, options: options)
             }
+            content.blocks = BlockNormalizer.normalize(content.blocks)
 
             pages.append(content)
             emit(.page(content))
@@ -154,7 +155,7 @@ public actor ConversionEngine {
         // Heading depth is a whole-document property; see `normalizeLevels`.
         pages = HeadingHeuristic.normalizeLevels(pages)
 
-        return OffprintDocument(
+        var document = OffprintDocument(
             source: .init(filename: url.lastPathComponent, pages: pages.count,
                           sha256: try? Self.sha256(of: url)),
             engine: .init(tier: options.tier,
@@ -162,6 +163,8 @@ public actor ConversionEngine {
                           appVersion: options.appVersion),
             pages: pages
         )
+        document.statistics = DocumentStatistics(document)
+        return document
     }
 
     /// Replaces tabular prose with real tables read by Vision.

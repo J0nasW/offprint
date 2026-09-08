@@ -43,6 +43,8 @@ struct DocumentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
+                } else if let statistics = job.document?.statistics {
+                    StatisticsBar(statistics: statistics)
                 }
             }
             .padding(.horizontal, 14)
@@ -87,6 +89,33 @@ struct DocumentView: View {
                 Text("Opening \(job.name)…").foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// The counts people actually need before feeding a document to a model.
+struct StatisticsBar: View {
+    let statistics: DocumentStatistics
+
+    var body: some View {
+        HStack(spacing: 12) {
+            item("\(statistics.words.formatted()) words")
+            item("\(statistics.characters.formatted()) chars")
+            // Named an estimate because it is one: an exact count is exact for
+            // exactly one tokenizer, and models disagree.
+            item("~\(statistics.estimatedTokens.formatted()) tokens")
+            if statistics.tables > 0 { item("\(statistics.tables) tables") }
+            if statistics.uncertainTables > 0 {
+                Label("\(statistics.uncertainTables) unverified",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .help("Token count is approximate: about one token per four Latin characters.")
+    }
+
+    private func item(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.secondary).monospacedDigit()
     }
 }
 

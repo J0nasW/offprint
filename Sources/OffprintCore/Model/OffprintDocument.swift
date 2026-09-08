@@ -52,6 +52,12 @@ public struct OffprintDocument: Codable, Sendable, Hashable {
     public var source: Source
     public var engine: Engine
     public var pages: [PageContent]
+    /// Counts for the whole document.
+    ///
+    /// Carried in the export rather than left to the caller: extraction is
+    /// usually a step on the way to a model, and whether the output fits a
+    /// context window is the first thing anyone asks.
+    public var statistics: DocumentStatistics?
 
     public struct Source: Codable, Sendable, Hashable {
         public var filename: String
@@ -75,10 +81,12 @@ public struct OffprintDocument: Codable, Sendable, Hashable {
         }
     }
 
-    public init(source: Source, engine: Engine, pages: [PageContent]) {
+    public init(source: Source, engine: Engine, pages: [PageContent],
+                statistics: DocumentStatistics? = nil) {
         self.source = source
         self.engine = engine
         self.pages = pages
+        self.statistics = statistics
     }
 
     public var allBlocks: [Block] { pages.flatMap(\.blocks) }

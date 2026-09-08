@@ -39,13 +39,25 @@ public struct TextLayerExtractor: Sendable {
         let layout = TextLayerGeometry.layout(of: page, displayBox: displayBox)
         let lines = layout.lines
 
+        // Contents first. A contents page is two columns of text and a table
+        // detector will claim it, so it has to be taken out of the running
+        // before tables are looked for at all.
+        let contents = ContentsDetector.detect(in: lines)
+        var consumed = Set<Int>()
+        for section in contents { consumed.formUnion(section.lineIndices) }
+
         let candidates = TableDetector.detect(lines: lines, glyphBoxes: layout.glyphBoxes,
                                               configuration: tableConfiguration)
+            .filter { candidate in
+                // Never offer a contents section to the table pass.
+                !candidate.lineIndices.contains { consumed.contains($0) }
+            }
 
-        // Everything becomes prose here, including the tabular runs. If Vision
+        // Everything else becomes prose, including the tabular runs. If Vision
         // later returns a real table for a region it replaces these blocks; if it
         // does not, the text survives as paragraphs rather than vanishing.
-        let paragraphs = TextLayerGeometry.paragraphs(from: lines)
+        let remainingIndices = lines.indices.filter { !consumed.contains($0) }
+        let paragraphs = TextLayerGeometry.paragraphs(from: remainingIndices.map { lines[$0] })
         let headingCandidates = paragraphs.map { paragraph in
             HeadingHeuristic.Candidate(
                 text: paragraph.text,
@@ -57,18 +69,34 @@ public struct TextLayerExtractor: Sendable {
         }
         let classified = HeadingHeuristic.classify(headingCandidates)
 
-        var blocks: [Block] = []
+        var keyed: [(line: Int, block: Block)] = contents.map {
+            ($0.lineIndices.lowerBound, .list($0.list))
+        }
+
+        // Paragraphs partition the surviving lines in order, so walking a cursor
+        // recovers each one's original line index and keeps everything in
+        // reading order without a position sort.
+        var cursor = 0
         for (index, paragraph) in paragraphs.enumerated() {
+            let key = remainingIndices.indices.contains(cursor)
+                ? remainingIndices[cursor] : lines.count
+            cursor += paragraph.lines.count
+
             let text = paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
             switch classified[index] {
             case .heading(let level):
-                blocks.append(.heading(.init(level: level, text: text, bbox: paragraph.bbox,
-                                             fontSize: paragraph.lines.map(\.fontSize).max())))
+                keyed.append((key, .heading(.init(level: level, text: text, bbox: paragraph.bbox,
+                                                  fontSize: paragraph.lines.map(\.fontSize).max()))))
             case .paragraph:
-                blocks.append(.paragraph(.init(text: text, bbox: paragraph.bbox)))
+                keyed.append((key, .paragraph(.init(text: text, bbox: paragraph.bbox))))
             }
         }
+
+        let blocks = keyed
+            .enumerated()
+            .sorted { ($0.element.line, $0.offset) < ($1.element.line, $1.offset) }
+            .map(\.element.block)
 
         let content = PageContent(
             index: pageIndex,

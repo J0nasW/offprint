@@ -27,6 +27,23 @@ settings:
 packages:
   OffprintCore:
     path: .
+  # MLX lives only in the Xcode project, never in Package.swift: adding it there
+  # would make `swift build` try to compile Metal shaders, which SwiftPM's CLI
+  # cannot do, and would cost the fast `swift test` loop its speed.
+  mlx-swift-lm:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    majorVersion: 3.31.4
+  # `#hubDownloader()` expands to code referencing HubClient, and mlx-swift-lm
+  # does not depend on swift-huggingface itself, so the consumer supplies it.
+  swift-huggingface:
+    url: https://github.com/huggingface/swift-huggingface
+    minVersion: 0.10.0
+    maxVersion: 1.0.0
+  # `#huggingFaceTokenizerLoader()` expands to `Tokenizers.AutoTokenizer`, which
+  # lives in swift-transformers rather than swift-huggingface.
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers
+    majorVersion: 1.3.4
 
 targets:
   Offprint:
@@ -34,9 +51,20 @@ targets:
     platform: macOS
     sources:
       - path: Sources/OffprintApp
+      - path: Sources/OffprintML
     dependencies:
       - package: OffprintCore
         product: OffprintCore
+      - package: mlx-swift-lm
+        product: MLXVLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
+      - package: mlx-swift-lm
+        product: MLXHuggingFace
+      - package: swift-huggingface
+        product: HuggingFace
+      - package: swift-transformers
+        product: Tokenizers
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.boostnow.Offprint

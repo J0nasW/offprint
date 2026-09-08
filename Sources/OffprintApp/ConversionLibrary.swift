@@ -49,8 +49,14 @@ final class ConversionLibrary {
     var extractFigures = true
     var isRunning = false
 
+    /// Which model the paid-in-disk tiers use.
+    var model: OCRModel = .glmOCR4bit
+    /// Non-nil while weights are downloading, 0...1.
+    var modelProgress: Double?
+    /// Set while the model is being prepared, or when it could not be loaded.
+    var modelStatus: String?
+
     private var worker: Task<Void, Never>?
-    private let engine = ConversionEngine()
 
     var selectedJob: Job? {
         jobs.first { $0.id == selection } ?? jobs.first { !$0.isFinished } ?? jobs.last
@@ -123,6 +129,44 @@ final class ConversionLibrary {
         for job in jobs where !job.isFinished { job.status = .cancelled }
     }
 
+    /// The engine for a tier.
+    ///
+    /// Built per job rather than held: it owns no expensive state — the loaded
+    /// weights live in `ModelStore` — so this costs nothing and keeps the tier
+    /// switch honest.
+    private func engine(for tier: QualityTier) -> ConversionEngine {
+        switch tier {
+        case .fast:
+            return ConversionEngine()
+        case .balanced, .best:
+            return ConversionEngine(ocrEngine: GLMOCRExtractor(model: model))
+        }
+    }
+
+    /// Ensures the tier's model is on disk and loaded before any page is read.
+    private func prepareModel(for tier: QualityTier) async -> Bool {
+        guard tier.requiresModel else { return true }
+        modelStatus = ModelStore.shared.isInstalled(model)
+            ? "Preparing \(model.displayName)…"
+            : "Downloading \(model.displayName)…"
+        modelProgress = 0
+        defer { modelProgress = nil }
+
+        do {
+            _ = try await ModelStore.shared.container(for: model) { fraction in
+                Task { @MainActor in self.modelProgress = fraction }
+            }
+            // Naming this state matters: MLX compiles its Metal kernels on the
+            // first inference, which is slow exactly once. An unlabelled spinner
+            // there reads as a hang.
+            modelStatus = nil
+            return true
+        } catch {
+            modelStatus = error.localizedDescription
+            return false
+        }
+    }
+
     private func run(_ job: Job) async {
         // A dropped URL sits outside the sandbox container, so access has to be
         // claimed for the duration and released afterwards.
@@ -132,6 +176,11 @@ final class ConversionLibrary {
         job.status = .converting(page: 0, of: 0)
         job.pages = []
 
+        guard await prepareModel(for: tier) else {
+            job.status = .failed(modelStatus ?? "The model could not be loaded.")
+            return
+        }
+
         let options = ConversionEngine.Options(
             tier: tier,
             extractFigures: extractFigures,
@@ -139,6 +188,7 @@ final class ConversionLibrary {
         )
 
         var total = 0
+        let engine = engine(for: tier)
         for await event in await engine.convert(url: job.url, options: options) {
             if Task.isCancelled { job.status = .cancelled; return }
             switch event {

@@ -4,254 +4,404 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Offprint — PDFs to Markdown, on your Mac</title>
-<meta name="description" content="Drop a PDF in, get clean Markdown and structured JSON. Runs entirely on your Mac. Free and open source.">
+<meta name="description" content="Offprint converts dense PDFs into clean Markdown and structured JSON, entirely on your Mac. Columns in the right order, tables that stay tables, maths as LaTeX.">
 <meta property="og:title" content="Offprint">
-<meta property="og:description" content="PDFs to Markdown and JSON, entirely on your Mac.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+<meta property="og:description" content="Dense PDFs become Markdown you can actually use. Nothing leaves your Mac.">
+<meta property="og:image" content="https://j0nasw.github.io/offprint/icon.png">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500;6..72,600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #fbfaf8;
-    --panel: #ffffff;
-    --ink: #16150f;
-    --muted: #6b6659;
-    --line: #e6e1d6;
-    --accent: #9a3f1c;
-    --accent-ink: #fff;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --ink:      #101b2d;
+    --paper:    #e8eaef;
+    --surface:  #ffffff;
+    --rule:     #c5cbd7;
+    --muted:    #56617a;
+    --blue:     #1f4fd8;
+    --red:      #c8342b;
+    --serif: "Newsreader", ui-serif, Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --measure: 34rem;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12110f;
-      --panel: #1a1916;
-      --ink: #f2efe8;
-      --muted: #a09a8c;
-      --line: #2c2a25;
-      --accent: #e07a4a;
-      --accent-ink: #1a1006;
+      --ink:     #e9ecf3;
+      --paper:   #0d1520;
+      --surface: #141e2c;
+      --rule:    #2a3648;
+      --muted:   #94a1bb;
+      --blue:    #7ea2ff;
+      --red:     #f08a80;
     }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background: var(--bg);
+    background: var(--paper);
     color: var(--ink);
-    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    font-variant-numeric: oldstyle-num;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
-  a { color: var(--accent); }
+  a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: currentColor; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 2px; }
 
-  header { padding: 88px 0 56px; text-align: center; }
-  .mark { display: block; margin: 0 auto; border-radius: 20px; width: 88px; height: 88px; }
-  h1 {
-    font-size: clamp(38px, 7vw, 60px);
-    letter-spacing: -0.03em;
-    margin: 18px 0 10px;
-    font-weight: 640;
-  }
-  .tagline { font-size: 20px; color: var(--muted); margin: 0 auto 32px; max-width: 30ch; }
+  .page { max-width: 68rem; margin: 0 auto; padding: 0 1.75rem; }
+  .band { padding: 3.6rem 0; }
+  .band + .band { border-top: 1px solid var(--rule); }
 
-  .cta {
-    display: inline-flex; flex-direction: column; align-items: center;
-    gap: 3px; padding: 15px 30px; border-radius: 12px;
-    background: var(--accent); color: var(--accent-ink);
-    text-decoration: none; font-weight: 600; font-size: 17px;
-    transition: transform .12s ease, filter .12s ease;
-  }
-  .cta:hover { transform: translateY(-1px); filter: brightness(1.06); }
-  .cta small { font-weight: 450; opacity: .82; font-size: 13px; }
-  .compat { margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+  h1, h2, h3 { font-weight: 500; letter-spacing: -0.012em; margin: 0; }
+  h1 { font-size: clamp(2.6rem, 6vw, 4.1rem); line-height: 1.06; letter-spacing: -0.028em; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); line-height: 1.2; margin-bottom: 1rem; }
+  h3 { font-size: 1.14rem; margin-bottom: .3rem; }
+  p { margin: 0 0 1.1rem; max-width: var(--measure); }
+  .lede { font-size: clamp(1.2rem, 2.2vw, 1.44rem); line-height: 1.5; color: var(--ink); font-weight: 300; }
+  .quiet { color: var(--muted); }
+  .small { font-size: .92rem; }
 
-  .brew {
-    margin: 22px auto 0; max-width: 460px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; font-family: var(--mono); font-size: 13.5px;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    text-align: left;
+  /* ---- masthead ---- */
+  .masthead { display: flex; align-items: center; gap: .8rem; padding-top: 2.5rem; }
+  .masthead img { width: 38px; height: 38px; border-radius: 9px; display: block; }
+  .masthead b { font-weight: 500; font-size: 1.06rem; letter-spacing: .01em; }
+  .masthead nav { margin-left: auto; display: flex; gap: 1.4rem; font-size: .95rem; }
+
+  /* ---- hero ---- */
+  .hero { padding: 3.2rem 0 3.4rem; }
+  .hero h1 { max-width: 15ch; }
+  .hero .lede { margin-top: 1.4rem; max-width: 40ch; }
+
+  .transform {
+    margin-top: 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 360px) 2.6rem minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0;
   }
+  .plate {
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    box-shadow: 0 1px 0 var(--rule);
+  }
+  .plate figcaption {
+    font-size: .82rem; color: var(--muted);
+    padding: .5rem .7rem; border-top: 1px solid var(--rule);
+  }
+  .map { display: block; width: 100%; height: auto; padding: .55rem; }
+  .map .r { fill: none; stroke-width: 3.4; }
+  .map .t { stroke: var(--rule); stroke-width: 5.5; stroke-linecap: round; opacity: .55; }
+  .r-paragraph { stroke: var(--rule); fill: color-mix(in srgb, var(--rule) 38%, transparent); }
+  .r-heading   { stroke: var(--blue); fill: var(--blue); }
+  .r-figure    { stroke: var(--red); fill: color-mix(in srgb, var(--red) 12%, transparent); }
+  .r-table     { stroke: var(--blue); fill: color-mix(in srgb, var(--blue) 10%, transparent); }
+
+  .arrow { display: grid; place-items: center; color: var(--muted); }
+  .arrow svg { width: 22px; height: 22px; }
+
+  .out {
+    flex: 1;
+    font-family: var(--mono); font-size: .8rem; line-height: 1.75;
+    padding: .9rem 1rem; margin: 0; overflow-x: auto;
+    font-variant-numeric: normal;
+  }
+  .out .h { color: var(--blue); font-weight: 500; }
+  .out .f { color: var(--red); }
+  .out .d { color: var(--muted); }
+
+  /* one orchestrated load: regions settle, then the text arrives */
+  .map .r, .map .t { opacity: 0; animation: settle .5s ease-out forwards; }
+  .map .t { animation-name: settleType; }
+  @keyframes settleType { from { opacity: 0; } to { opacity: .55; } }
+  .out .ln { opacity: 0; animation: settle .34s ease-out forwards; }
+  @keyframes settle { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .map .r, .out .ln { animation: none; opacity: 1; }
+    .map .t { animation: none; opacity: .55; }
+  }
+
+  /* ---- actions ---- */
+  .actions { display: flex; flex-wrap: wrap; gap: 1rem 1.4rem; align-items: center; margin-top: 2.6rem; }
+  .get {
+    font-family: var(--serif); font-size: 1.06rem; font-weight: 500;
+    background: var(--ink); color: var(--paper);
+    padding: .7rem 1.5rem; border-radius: 3px; text-decoration: none;
+    display: inline-flex; align-items: baseline; gap: .55rem;
+  }
+  .get:hover { background: var(--blue); color: #fff; }
+  .get span { font-size: .82rem; font-weight: 400; opacity: .75; font-family: var(--mono); }
+  .brew { font-family: var(--mono); font-size: .82rem; color: var(--muted); }
   .brew button {
-    border: 1px solid var(--line); background: transparent; color: var(--muted);
-    border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer;
-    font-family: inherit;
+    font: inherit; color: inherit; background: none; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 3px; padding: .2rem .5rem; margin-left: .4rem;
   }
-  .brew button:hover { color: var(--ink); }
+  .brew button:hover { color: var(--ink); border-color: var(--muted); }
+  .requires { margin-top: .9rem; font-size: .9rem; color: var(--muted); }
 
-  section { padding: 40px 0; border-top: 1px solid var(--line); }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .085em;
-       color: var(--muted); font-weight: 620; margin: 0 0 22px; }
-  h3 { font-size: 17px; margin: 0 0 5px; font-weight: 600; }
+  /* ---- two-up prose + artifact ---- */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 3rem; align-items: start; }
+  .split.flip > :first-child { order: 2; }
 
-  .lead { font-size: 19px; line-height: 1.6; margin: 0; }
-  .lead strong { font-weight: 640; }
+  table.data { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  table.data th, table.data td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule); }
+  table.data th { font-weight: 500; color: var(--muted); font-size: .88rem; }
+  table.data td:first-child { white-space: nowrap; }
+  table.data th:nth-child(4), table.data td:nth-child(4) { white-space: nowrap; }
+  table.data tbody tr:last-child td { border-bottom: none; }
+  .num { font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
-  .steps p { margin: 0; color: var(--muted); font-size: 14.5px; }
-  .num { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .facts { margin: 0; }
+  .facts div { padding: 1rem 0; border-top: 1px solid var(--rule); }
+  .facts div:first-child { border-top: none; padding-top: 0; }
+  .facts p { margin: 0; color: var(--muted); font-size: .98rem; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
-  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 560; font-size: 13px; }
-  td:first-child { font-weight: 600; white-space: nowrap; }
-  .note { color: var(--muted); font-size: 13.5px; margin-top: 14px; }
-
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 30px; }
-  .grid p { margin: 0; color: var(--muted); font-size: 14.5px; }
-
-  pre {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 15px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px;
-    line-height: 1.55; margin: 0;
+  pre.code {
+    font-family: var(--mono); font-size: .75rem; line-height: 1.7;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 3px;
+    padding: .95rem 1.1rem; overflow-x: auto; margin: 0;
+    font-variant-numeric: normal;
   }
-  footer { padding: 46px 0 70px; color: var(--muted); font-size: 13.5px;
-           text-align: center; border-top: 1px solid var(--line); }
-  @media (max-width: 620px) {
-    .steps, .grid { grid-template-columns: 1fr; }
-    header { padding: 60px 0 40px; }
+  footer { padding: 3rem 0 4.5rem; color: var(--muted); font-size: .92rem; }
+
+  @media (max-width: 880px) {
+    .transform { grid-template-columns: 1fr; }
+    .arrow { padding: 1rem 0; transform: rotate(90deg); }
+    .split { grid-template-columns: 1fr; gap: 1.8rem; }
+    .split.flip > :first-child { order: 0; }
   }
 </style>
 </head>
 <body>
 
-<header class="wrap">
-  <img class="mark" src="icon.png" alt="" width="88" height="88">
-  <h1>Offprint</h1>
-  <p class="tagline">PDFs become clean Markdown. On your Mac, not someone's server.</p>
-
-  <a class="cta" id="download" href="https://github.com/J0nasW/offprint/releases/latest/download/Offprint.dmg">
-    Download for Mac
-    <small id="meta">Latest release</small>
-  </a>
-  <div class="compat">macOS 26 · Apple Silicon · Free and open source</div>
-
-  <div class="brew">
-    <code id="brewcmd">brew install --cask J0nasW/offprint/offprint</code>
-    <button onclick="copyBrew(this)">Copy</button>
-  </div>
+<header class="page masthead">
+  <img src="icon.png" alt="">
+  <b>Offprint</b>
+  <nav>
+    <a href="#what">What it does</a>
+    <a href="#tiers">Speed</a>
+    <a href="#agents">For agents</a>
+    <a href="https://github.com/J0nasW/offprint">GitHub</a>
+  </nav>
 </header>
 
-<main class="wrap">
+<main>
+<section class="page hero">
+  <h1>Dense PDFs, turned into Markdown you can actually use.</h1>
+  <p class="lede">Offprint reads a paper the way you do — columns in order, headings as headings,
+    tables as tables — and writes it out as clean Markdown and structured JSON. On your Mac,
+    without sending a page anywhere.</p>
 
-  <section>
-    <h2>Why it's local</h2>
-    <p class="lead">
-      A 0.9&nbsp;billion-parameter open model now scores <strong>95.2</strong> on OmniDocBench —
-      above Gemini&nbsp;3&nbsp;Pro at 92.9 and GPT‑5.2 at 86.6 — and it runs on a laptop.
-      For reading documents, on-device stopped being the compromise. Your PDFs
-      never leave the machine, and there is no account, no quota, and no per-page bill.
-    </p>
-  </section>
+  <div class="transform">
+    <figure class="plate" style="margin:0">
+      <svg class="map" viewBox="0 0 595 791" role="img" aria-label="The regions Offprint detected on one journal page: a figure across the top, two columns of body text below it, and a heading in the right column.">
+        <rect class="r r-figure" x="41.3" y="56.5" width="520.9" height="289.5" rx="2" style="animation-delay:0.15s"/>
+        <rect class="r r-paragraph" x="39.8" y="355.2" width="249.1" height="107.0" rx="2" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="359.2" x2="285.9" y2="359.2" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="372.6" x2="285.9" y2="372.6" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="386.0" x2="285.9" y2="386.0" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="399.4" x2="285.9" y2="399.4" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="412.8" x2="285.9" y2="412.8" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="426.2" x2="285.9" y2="426.2" style="animation-delay:0.23s"/>
+        <line class="t" x1="42.8" y1="439.6" x2="163.3" y2="439.6" style="animation-delay:0.23s"/>
+        <rect class="r r-paragraph" x="306.5" y="355.2" width="250.0" height="107.0" rx="2" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="359.2" x2="553.6" y2="359.2" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="372.6" x2="553.6" y2="372.6" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="386.0" x2="553.6" y2="386.0" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="399.4" x2="553.6" y2="399.4" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="412.8" x2="553.6" y2="412.8" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="426.2" x2="553.6" y2="426.2" style="animation-delay:0.31s"/>
+        <line class="t" x1="309.5" y1="439.6" x2="411.5" y2="439.6" style="animation-delay:0.31s"/>
+        <rect class="r r-paragraph" x="39.8" y="489.8" width="254.8" height="201.7" rx="2" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="493.8" x2="291.6" y2="493.8" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="507.2" x2="291.6" y2="507.2" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="520.6" x2="291.6" y2="520.6" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="534.0" x2="291.6" y2="534.0" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="547.4" x2="291.6" y2="547.4" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="560.8" x2="291.6" y2="560.8" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="574.2" x2="291.6" y2="574.2" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="587.6" x2="291.6" y2="587.6" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="601.0" x2="291.6" y2="601.0" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="614.4" x2="291.6" y2="614.4" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="627.8" x2="291.6" y2="627.8" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="641.2" x2="291.6" y2="641.2" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="654.6" x2="291.6" y2="654.6" style="animation-delay:0.39s"/>
+        <line class="t" x1="42.8" y1="668.0" x2="202.8" y2="668.0" style="animation-delay:0.39s"/>
+        <rect class="r r-paragraph" x="306.3" y="489.8" width="284.7" height="53.3" rx="2" style="animation-delay:0.47s"/>
+        <line class="t" x1="309.3" y1="493.8" x2="588.0" y2="493.8" style="animation-delay:0.47s"/>
+        <line class="t" x1="309.3" y1="507.2" x2="588.0" y2="507.2" style="animation-delay:0.47s"/>
+        <line class="t" x1="309.3" y1="520.6" x2="415.9" y2="520.6" style="animation-delay:0.47s"/>
+        <rect class="r r-heading" x="306.8" y="553.0" width="55.0" height="8.0" rx="2" style="animation-delay:0.55s"/>
+        <rect class="r r-paragraph" x="306.3" y="565.1" width="254.9" height="178.6" rx="2" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="569.1" x2="558.2" y2="569.1" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="582.5" x2="558.2" y2="582.5" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="595.9" x2="558.2" y2="595.9" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="609.3" x2="558.2" y2="609.3" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="622.7" x2="558.2" y2="622.7" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="636.1" x2="558.2" y2="636.1" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="649.5" x2="558.2" y2="649.5" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="662.9" x2="558.2" y2="662.9" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="676.3" x2="558.2" y2="676.3" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="689.7" x2="558.2" y2="689.7" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="703.1" x2="558.2" y2="703.1" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="716.5" x2="558.2" y2="716.5" style="animation-delay:0.63s"/>
+        <line class="t" x1="309.3" y1="729.9" x2="456.4" y2="729.9" style="animation-delay:0.63s"/>
+        <rect class="r r-paragraph" x="39.8" y="694.0" width="254.7" height="51.2" rx="2" style="animation-delay:0.71s"/>
+        <line class="t" x1="42.8" y1="698.0" x2="291.5" y2="698.0" style="animation-delay:0.71s"/>
+        <line class="t" x1="42.8" y1="711.4" x2="291.5" y2="711.4" style="animation-delay:0.71s"/>
+        <line class="t" x1="42.8" y1="724.8" x2="170.8" y2="724.8" style="animation-delay:0.71s"/>
+      </svg>
+      <figcaption>Regions Offprint found on one page. Red is a figure, blue a heading.</figcaption>
+    </figure>
 
-  <section>
-    <h2>How it works</h2>
-    <div class="steps">
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M3 12h17m0 0-6-6m6 6-6 6"/>
+      </svg>
+    </div>
+
+    <figure class="plate" style="margin:0">
+      <pre class="out"><span class="ln" style="animation-delay:.9s"><span class="f">![Direct AI use across disciplines](images/p006-fig01.png)</span></span>
+<span class="ln" style="animation-delay:1.0s"></span>
+<span class="ln" style="animation-delay:1.05s">Encoder-only models remain the workhorse of many</span>
+<span class="ln" style="animation-delay:1.12s">production pipelines, yet they have seen limited</span>
+<span class="ln" style="animation-delay:1.19s">Pareto improvement since BERT.</span>
+<span class="ln" style="animation-delay:1.26s"></span>
+<span class="ln" style="animation-delay:1.33s"><span class="h">## Results</span></span>
+<span class="ln" style="animation-delay:1.40s"></span>
+<span class="ln" style="animation-delay:1.47s">The direct AI use score rose from 0.5% in 2000 to</span>
+<span class="ln" style="animation-delay:1.54s">1.3% in 2019, with <span class="d">$b = 0.00031$</span>, <span class="d">$P &lt; 0.001$</span>.</span>
+<span class="ln" style="animation-delay:1.61s"></span>
+<span class="ln" style="animation-delay:1.68s"><span class="h">### Direct use by discipline</span></span>
+<span class="ln" style="animation-delay:1.75s"></span>
+<span class="ln" style="animation-delay:1.82s">| Discipline       | 2000 | 2019 |</span>
+<span class="ln" style="animation-delay:1.89s">| ---              | ---  | ---  |</span>
+<span class="ln" style="animation-delay:1.96s">| Computer science | 0.51 | 1.29 |</span>
+<span class="ln" style="animation-delay:2.03s">| Engineering      | 0.17 | 0.38 |</span>
+<span class="ln" style="animation-delay:2.10s">| Biology          | 0.04 | 0.22 |</span></pre>
+      <figcaption>The Markdown it wrote, with the figure cropped out alongside.</figcaption>
+    </figure>
+  </div>
+
+  <div class="actions">
+    <a class="get" id="download" href="https://github.com/J0nasW/offprint/releases/latest/download/Offprint.dmg">
+      Download for Mac <span id="meta">latest release</span>
+    </a>
+    <div class="brew">
+      <code id="brewcmd">brew install --cask J0nasW/offprint/offprint</code>
+      <button type="button" onclick="copyBrew(this)">Copy</button>
+    </div>
+  </div>
+  <p class="requires small quiet">macOS 26 or later, Apple silicon. Free, open source, no account.</p>
+</section>
+
+<section class="band" id="what">
+  <div class="page split">
+    <div>
+      <h2>Most PDF converters read a two-column paper wrong.</h2>
+      <p>They take the text in the order the file happens to store it, which on a
+        two-column page interleaves the columns. What comes out is fluent, plausible,
+        and says something the paper never said.</p>
+      <p>Offprint ignores that order entirely. It finds the gutter by looking at where
+        the glyphs actually sit, keeps a full-width title whole, and reads the left
+        column to the bottom before starting the right one.</p>
+      <p class="quiet small">The same geometry finds tables by their empty columns, so a
+        results table survives as a table instead of becoming a paragraph of numbers.</p>
+    </div>
+    <div class="facts">
       <div>
-        <div class="num">01</div>
-        <h3>Drop it in</h3>
-        <p>One PDF, a stack of them, or a whole folder. The window is the drop target.</p>
+        <h3>A contents page becomes an outline</h3>
+        <p>Not a two-column table. Entries keep their page numbers and nest by section
+          number, so you can navigate what you extracted.</p>
       </div>
       <div>
-        <div class="num">02</div>
-        <h3>Pick a tier</h3>
-        <p>Three stops from instant to most accurate, each labelled with what it actually costs.</p>
+        <h3>Maths comes out as LaTeX</h3>
+        <p><code class="small">$\mathcal{A}=\{A_{1},\dots,A_{n}\}$</code>, not a row of
+          broken glyphs — and the preview renders it as 𝒜={A₁,…,Aₙ}.</p>
       </div>
       <div>
-        <div class="num">03</div>
-        <h3>Take the output</h3>
-        <p>Markdown to read, JSON to build on, figures cropped out alongside.</p>
+        <h3>Running headers are dropped</h3>
+        <p>A journal repeats its title and DOI on all fifteen pages. That belongs to the
+          paper, not to what you asked for.</p>
+      </div>
+      <div>
+        <h3>When a table looks wrong, it says so</h3>
+        <p>A mis-split table still renders as valid Markdown, so nothing downstream can
+          catch it. Offprint flags the ones it could not verify.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section>
-    <h2>The three stops</h2>
-    <table>
-      <tr><th>Tier</th><th>What runs</th><th>Speed</th><th>Download</th></tr>
-      <tr>
-        <td>Fast</td>
-        <td>The PDF's own text layer, with Apple Vision for scanned pages</td>
-        <td>0.04–0.6 s/page</td>
-        <td>none</td>
-      </tr>
-      <tr>
-        <td>Balanced</td>
-        <td>GLM-OCR reads whatever the text layer can't describe</td>
-        <td>~4.3 s/page</td>
-        <td>1.25 GB</td>
-      </tr>
-      <tr>
-        <td>Best</td>
-        <td>Vision finds the regions, GLM-OCR reads each one</td>
-        <td>~4.3 s/page, every page</td>
-        <td>same model</td>
-      </tr>
-    </table>
-    <p class="note">
-      Speeds are measured on an M1&nbsp;Pro by the project's own harness, not estimated.
-      Prose-only pages sit at the fast end; pages holding tables cost more, because
-      they get a real table read rather than a guess.
-      Balanced and Best share one download — the difference is compute, not disk.
-      Fast needs no network at all.
-    </p>
-  </section>
-
-  <section>
-    <h2>What comes out</h2>
-    <pre>{
-  "pages": [{
-    "index": 0, "width": 595, "height": 841,
-    "blocks": [
-      { "type": "heading", "level": 1, "text": "…", "bbox": [74, 71, 447, 12.8] },
-      { "type": "table", "rows": [[{ "text": "…", "colSpan": 2 }]] },
-      { "type": "figure", "path": "images/p001-fig01.png" }
-    ]
-  }]
-}</pre>
-    <p class="note">
-      Markdown and JSON render from the same block tree, so they can't disagree.
-      JSON keeps bounding boxes and column spans — the things Markdown has no way to say.
-    </p>
-  </section>
-
-  <section>
-    <h2>Details that matter</h2>
-    <div class="grid">
-      <div>
-        <h3>Columns read in the right order</h3>
-        <p>A two-column paper is rebuilt from glyph geometry, so the columns don't interleave into fluent nonsense.</p>
-      </div>
-      <div>
-        <h3>Tables stay tables</h3>
-        <p>Merged cells survive into JSON. When the structure looks doubtful, the output says so instead of pretending.</p>
-      </div>
-      <div>
-        <h3>Figures come with it</h3>
-        <p>Charts and diagrams are cropped from the page and linked from the Markdown.</p>
-      </div>
-      <div>
-        <h3>Every page routed on its own</h3>
-        <p>A digital report with scanned appendices gets both halves right.</p>
-      </div>
-      <div>
-        <h3>Agents can read it directly</h3>
-        <p>An MCP server ships in the app: an assistant sees the outline, searches it, and reads the one section it needs — instead of swallowing 60,000 tokens.</p>
-      </div>
-      <div>
-        <h3>Built for feeding models</h3>
-        <p>Word, character and token counts, plus chunks cut by section that carry their heading trail — not a fixed window that cuts sentences in half.</p>
-      </div>
-      <div>
-        <h3>Contents pages become outlines</h3>
-        <p>A table of contents is a nested list of pointers, not a table, and it comes out as one.</p>
-      </div>
+<section class="band" id="tiers">
+  <div class="page split flip">
+    <div>
+      <table class="data">
+        <thead><tr><th>Setting</th><th>What runs</th><th>Speed</th><th>Download</th></tr></thead>
+        <tbody>
+          <tr><td>Fast</td><td>The PDF's own text layer, with Apple Vision for scans</td>
+              <td class="num">0.04–0.8&nbsp;s</td><td>none</td></tr>
+          <tr><td>Balanced</td><td>GLM-OCR reads what the text layer cannot describe</td>
+              <td class="num">≈4&nbsp;s</td><td>1.25&nbsp;GB</td></tr>
+          <tr><td>Best</td><td>GLM-OCR reads every region of every page</td>
+              <td class="num">≈23&nbsp;s</td><td>same model</td></tr>
+        </tbody>
+      </table>
+      <p class="small quiet" style="margin-top:.9rem">Seconds per page, measured on an
+        M1&nbsp;Pro by the project's own test harness. A 125-page report takes about
+        40&nbsp;seconds on Fast.</p>
     </div>
-  </section>
+    <div>
+      <h2>Three settings, and honest numbers for each.</h2>
+      <p>Fast needs no download and no network, and handles most born-digital PDFs
+        completely — its text is exact, because it comes from the file rather than from
+        a guess about pixels.</p>
+      <p>The other two run a 0.9-billion-parameter document model on your own GPU. It is
+        worth the wait for scans, for handwriting, and for pages where the maths matters
+        more than the minutes.</p>
+    </div>
+  </div>
+</section>
 
+<section class="band" id="agents">
+  <div class="page split">
+    <div>
+      <h2>An assistant can read your PDFs without swallowing them.</h2>
+      <p>Offprint speaks the Model Context Protocol, so Claude Code, Claude Desktop or
+        any MCP client can open a document on this Mac.</p>
+      <p>A 125-page report is about 64,000 tokens. Handing that back in one call spends
+        most of an agent's context answering something one section would have answered,
+        so the tools are built the other way round: read the outline, search it, then
+        pull the part you need.</p>
+    </div>
+    <div>
+      <pre class="code">claude mcp add offprint -- \
+  "/Applications/Offprint PDF to Markdown.app\
+   /Contents/MacOS/offprint" --mcp</pre>
+      <pre class="code" style="margin-top:1rem">125 pages, 41,022 words, ~63,582 tokens
+
+3   Defining Artificial Intelligence 2.0   1394 tokens, p.1
+  3.7 1 Introduction                       1490 tokens, p.12
+  3.8 2 AI definitions                        4 tokens, p.14
+    3.8.1 Definitions in market and policy  425 tokens, p.14</pre>
+    </div>
+  </div>
+</section>
 </main>
 
-<footer class="wrap">
-  <a href="https://github.com/J0nasW/offprint">Source on GitHub</a> ·
-  MIT licensed
+<footer class="page">
+  <p style="max-width:none">
+    <a href="https://github.com/J0nasW/offprint">Source on GitHub</a>
+    &nbsp;&nbsp;&nbsp; MIT licensed
+    &nbsp;&nbsp;&nbsp; Built by <a href="https://github.com/J0nasW">Jonas Wilinski</a>
+  </p>
 </footer>
 
 <script>
@@ -266,8 +416,8 @@
       .catch(() => { button.textContent = "Copy failed"; });
   }
 
-  // Fill in the version and size. The button already points at a permanent
-  // redirect, so this only ever adds detail — it never has to work.
+  // Fill in version and size. The button already points at a permanent redirect,
+  // so this only ever adds detail and never has to succeed.
   (async () => {
     const meta = document.getElementById("meta");
     try {
@@ -277,13 +427,9 @@
         : await (await fetch(`https://api.github.com/repos/${REPO}/releases/latest`)).json();
       if (!release || !release.tag_name) return;
       sessionStorage.setItem("offprint-release", JSON.stringify(release));
-
       const asset = (release.assets || []).find(a => a.name.endsWith(".dmg"));
-      const size = asset ? ` · ${(asset.size / 1048576).toFixed(1)} MB` : "";
-      meta.textContent = `${release.tag_name}${size}`;
-    } catch (error) {
-      /* Keep the static label. */
-    }
+      meta.textContent = release.tag_name + (asset ? `, ${(asset.size / 1048576).toFixed(1)} MB` : "");
+    } catch (error) { /* keep the static label */ }
   })();
 </script>
 </body>

@@ -41,6 +41,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/Offprint.xcarchive" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO
           mkdir -p "$RUNNER_TEMP/export"
           cp -R "$RUNNER_TEMP/Offprint.xcarchive/Products/Applications/Offprint PDF to Markdown.app" \
@@ -99,8 +100,15 @@ jobs:
             --no-internet-enable \
             "$RUNNER_TEMP/Offprint.dmg" \
             "$RUNNER_TEMP/export/" \
-          || hdiutil create -volname Offprint -srcfolder "$RUNNER_TEMP/export" \
-               -ov -format UDZO "$RUNNER_TEMP/Offprint.dmg"
+          || {
+            # create-dmg drives Finder through AppleScript and cannot do that on
+            # a headless runner, so this fallback is the path CI actually takes.
+            # It has to add the Applications symlink itself.
+            ln -sf /Applications "$RUNNER_TEMP/export/Applications"
+            hdiutil create -volname Offprint -srcfolder "$RUNNER_TEMP/export" \
+              -ov -format UDZO "$RUNNER_TEMP/Offprint.dmg"
+          }
+          hdiutil imageinfo "$RUNNER_TEMP/Offprint.dmg" > /dev/null
 
       - name: Notarize and staple
         if: env.ASC_KEY_P8 != ''

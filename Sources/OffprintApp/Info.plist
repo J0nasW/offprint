@@ -8,6 +8,10 @@
     <key>CFBundleDisplayName</key><string>Offprint PDF to Markdown</string>
     <key>CFBundleExecutable</key><string>offprint</string>
     <key>CFBundlePackageType</key><string>APPL</string>
+    <!-- Required for `xcodebuild archive`, which fails with "Archive Missing
+         Bundle Identifier" when this is absent even though the build setting
+         is present. -->
+    <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSMinimumSystemVersion</key><string>26.0</string>

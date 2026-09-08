@@ -1,13 +1,28 @@
+<div align="center">
+
+<img src="docs/icon-128.png" alt="" width="104" height="104">
+
 # Offprint
 
-Turn PDFs into clean Markdown and structured JSON, entirely on your Mac.
+**Dense PDFs, turned into Markdown you can actually use.**
 
-Drop a PDF in. Nothing is uploaded, nothing is logged, no account is needed.
+Columns in the right order. Tables that stay tables. Maths as LaTeX.
+Everything runs on your Mac — no account, no upload, no per-page bill.
 
-> **Status: early.** The engine, the Fast tier, the app, and the release pipeline
-> are working. The GLM-OCR tiers (Balanced and Best) are not implemented yet — the
-> slider moves, but all three stops currently run the Fast pipeline. See
-> [Roadmap](#roadmap).
+[Website](https://j0nasw.github.io/offprint/) · [Download](https://github.com/J0nasW/offprint/releases/latest) · [MCP server](#for-agents-mcp)
+
+</div>
+
+---
+
+> **Status: early.** The engine, the app, the MCP server and the release pipeline
+> all work. See [Roadmap](#roadmap) for what is not done.
+
+## Why local
+
+A 0.9B open model now scores **95.22** on OmniDocBench v1.6 — above Gemini 3 Pro
+(92.91) and GPT‑5.2 (86.59) — and it runs on a laptop. For reading documents,
+on-device stopped being the compromise.
 
 ## Install
 

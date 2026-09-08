@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Pinned, not `macos-latest`: that label moved to macOS 26 mid-2026 and will
+    # move again. Offprint needs macOS 26 for Vision's RecognizeDocumentsRequest.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: swift --version && xcodebuild -version
+
+      # OffprintCore carries no MLX dependency precisely so this stays fast and
+      # needs no Metal toolchain.
+      - name: Test the engine
+        run: swift test
+
+      - name: Build the app
+        run: |
+          brew install --quiet xcodegen
+          xcodegen generate
+          xcodebuild build \
+            -project Offprint.xcodeproj \
+            -scheme Offprint \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify || xcodebuild build \
+            -project Offprint.xcodeproj -scheme Offprint -configuration Release \
+            CODE_SIGNING_ALLOWED=NO

@@ -1,0 +1,47 @@
+# Source of truth for the Xcode project: `xcodegen generate`.
+#
+# An Xcode project is required rather than plain SwiftPM because SwiftPM's CLI
+# cannot compile MLX's Metal shaders — but a checked-in .xcodeproj is unreadable
+# and unmergeable, so it is generated from this file instead.
+name: Offprint
+options:
+  bundleIdPrefix: de.boostnow
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    # Swift 6.2 "approachable concurrency": everything is MainActor unless it
+    # opts out, which removes most annotation noise from UI code.
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ARCHS: arm64
+
+packages:
+  OffprintCore:
+    path: .
+
+targets:
+  Offprint:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/OffprintApp
+    dependencies:
+      - package: OffprintCore
+        product: OffprintCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.boostnow.Offprint
+        PRODUCT_NAME: Offprint
+        INFOPLIST_FILE: Sources/OffprintApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/OffprintApp/Offprint.entitlements
+        ENABLE_APP_SANDBOX: NO
+        COMBINE_HIDPI_IMAGES: YES

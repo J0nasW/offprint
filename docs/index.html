@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offprint — PDFs to Markdown, on your Mac</title>
+<meta name="description" content="Drop a PDF in, get clean Markdown and structured JSON. Runs entirely on your Mac. Free and open source.">
+<meta property="og:title" content="Offprint">
+<meta property="og:description" content="PDFs to Markdown and JSON, entirely on your Mac.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf8;
+    --panel: #ffffff;
+    --ink: #16150f;
+    --muted: #6b6659;
+    --line: #e6e1d6;
+    --accent: #9a3f1c;
+    --accent-ink: #fff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12110f;
+      --panel: #1a1916;
+      --ink: #f2efe8;
+      --muted: #a09a8c;
+      --line: #2c2a25;
+      --accent: #e07a4a;
+      --accent-ink: #1a1006;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); }
+
+  header { padding: 88px 0 56px; text-align: center; }
+  .mark { font-size: 44px; line-height: 1; }
+  h1 {
+    font-size: clamp(38px, 7vw, 60px);
+    letter-spacing: -0.03em;
+    margin: 18px 0 10px;
+    font-weight: 640;
+  }
+  .tagline { font-size: 20px; color: var(--muted); margin: 0 auto 32px; max-width: 30ch; }
+
+  .cta {
+    display: inline-flex; flex-direction: column; align-items: center;
+    gap: 3px; padding: 15px 30px; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink);
+    text-decoration: none; font-weight: 600; font-size: 17px;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .cta:hover { transform: translateY(-1px); filter: brightness(1.06); }
+  .cta small { font-weight: 450; opacity: .82; font-size: 13px; }
+  .compat { margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+
+  .brew {
+    margin: 22px auto 0; max-width: 460px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; font-family: var(--mono); font-size: 13.5px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    text-align: left;
+  }
+  .brew button {
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  .brew button:hover { color: var(--ink); }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .085em;
+       color: var(--muted); font-weight: 620; margin: 0 0 22px; }
+  h3 { font-size: 17px; margin: 0 0 5px; font-weight: 600; }
+
+  .lead { font-size: 19px; line-height: 1.6; margin: 0; }
+  .lead strong { font-weight: 640; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  .steps p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .num { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 560; font-size: 13px; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .note { color: var(--muted); font-size: 13.5px; margin-top: 14px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 30px; }
+  .grid p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 15px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.55; margin: 0;
+  }
+  footer { padding: 46px 0 70px; color: var(--muted); font-size: 13.5px;
+           text-align: center; border-top: 1px solid var(--line); }
+  @media (max-width: 620px) {
+    .steps, .grid { grid-template-columns: 1fr; }
+    header { padding: 60px 0 40px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="mark">📄</div>
+  <h1>Offprint</h1>
+  <p class="tagline">PDFs become clean Markdown. On your Mac, not someone's server.</p>
+
+  <a class="cta" id="download" href="https://github.com/J0nasW/offprint/releases/latest/download/Offprint.dmg">
+    Download for Mac
+    <small id="meta">Latest release</small>
+  </a>
+  <div class="compat">macOS 26 · Apple Silicon · Free and open source</div>
+
+  <div class="brew">
+    <code id="brewcmd">brew install --cask J0nasW/offprint/offprint</code>
+    <button onclick="copyBrew(this)">Copy</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2>Why it's local</h2>
+    <p class="lead">
+      A 0.9&nbsp;billion-parameter open model now scores <strong>95.2</strong> on OmniDocBench —
+      above Gemini&nbsp;3&nbsp;Pro at 92.9 and GPT‑5.2 at 86.6 — and it runs on a laptop.
+      For reading documents, on-device stopped being the compromise. Your PDFs
+      never leave the machine, and there is no account, no quota, and no per-page bill.
+    </p>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="steps">
+      <div>
+        <div class="num">01</div>
+        <h3>Drop it in</h3>
+        <p>One PDF, a stack of them, or a whole folder. The window is the drop target.</p>
+      </div>
+      <div>
+        <div class="num">02</div>
+        <h3>Pick a tier</h3>
+        <p>Three stops from instant to most accurate, each labelled with what it actually costs.</p>
+      </div>
+      <div>
+        <div class="num">03</div>
+        <h3>Take the output</h3>
+        <p>Markdown to read, JSON to build on, figures cropped out alongside.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The three stops</h2>
+    <table>
+      <tr><th>Tier</th><th>What runs</th><th>Speed</th><th>Download</th></tr>
+      <tr>
+        <td>Fast</td>
+        <td>The PDF's own text layer, with Apple Vision for scanned pages</td>
+        <td>0.015–0.13 s/page</td>
+        <td>none</td>
+      </tr>
+      <tr>
+        <td>Balanced</td>
+        <td>GLM-OCR reads whatever the text layer can't describe</td>
+        <td>measured at release</td>
+        <td>1.25 GB</td>
+      </tr>
+      <tr>
+        <td>Best</td>
+        <td>Vision finds the regions, GLM-OCR reads each one</td>
+        <td>measured at release</td>
+        <td>same model</td>
+      </tr>
+    </table>
+    <p class="note">
+      Speeds are measured on an M1&nbsp;Pro by the project's own harness, not estimated.
+      Balanced and Best share one download — the difference is compute, not disk.
+      Fast needs no network at all.
+    </p>
+  </section>
+
+  <section>
+    <h2>What comes out</h2>
+    <pre>{
+  "pages": [{
+    "index": 0, "width": 595, "height": 841,
+    "blocks": [
+      { "type": "heading", "level": 1, "text": "…", "bbox": [74, 71, 447, 12.8] },
+      { "type": "table", "rows": [[{ "text": "…", "colSpan": 2 }]] },
+      { "type": "figure", "path": "images/p001-fig01.png" }
+    ]
+  }]
+}</pre>
+    <p class="note">
+      Markdown and JSON render from the same block tree, so they can't disagree.
+      JSON keeps bounding boxes and column spans — the things Markdown has no way to say.
+    </p>
+  </section>
+
+  <section>
+    <h2>Details that matter</h2>
+    <div class="grid">
+      <div>
+        <h3>Columns read in the right order</h3>
+        <p>A two-column paper is rebuilt from glyph geometry, so the columns don't interleave into fluent nonsense.</p>
+      </div>
+      <div>
+        <h3>Tables stay tables</h3>
+        <p>Merged cells survive into JSON. When the structure looks doubtful, the output says so instead of pretending.</p>
+      </div>
+      <div>
+        <h3>Figures come with it</h3>
+        <p>Charts and diagrams are cropped from the page and linked from the Markdown.</p>
+      </div>
+      <div>
+        <h3>Every page routed on its own</h3>
+        <p>A digital report with scanned appendices gets both halves right.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <a href="https://github.com/J0nasW/offprint">Source on GitHub</a> ·
+  MIT licensed
+</footer>
+
+<script>
+  const REPO = "J0nasW/offprint";
+
+  function copyBrew(button) {
+    navigator.clipboard.writeText(document.getElementById("brewcmd").textContent.trim())
+      .then(() => {
+        button.textContent = "Copied";
+        setTimeout(() => (button.textContent = "Copy"), 1600);
+      })
+      .catch(() => { button.textContent = "Copy failed"; });
+  }
+
+  // Fill in the version and size. The button already points at a permanent
+  // redirect, so this only ever adds detail — it never has to work.
+  (async () => {
+    const meta = document.getElementById("meta");
+    try {
+      const cached = sessionStorage.getItem("offprint-release");
+      const release = cached
+        ? JSON.parse(cached)
+        : await (await fetch(`https://api.github.com/repos/${REPO}/releases/latest`)).json();
+      if (!release || !release.tag_name) return;
+      sessionStorage.setItem("offprint-release", JSON.stringify(release));
+
+      const asset = (release.assets || []).find(a => a.name.endsWith(".dmg"));
+      const size = asset ? ` · ${(asset.size / 1048576).toFixed(1)} MB` : "";
+      meta.textContent = `${release.tag_name}${size}`;
+    } catch (error) {
+      /* Keep the static label. */
+    }
+  })();
+</script>
+</body>
+</html>

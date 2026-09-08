@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    env:
+      # Present only when the repo has been given signing secrets. Without them
+      # the build is ad-hoc signed, which still launches — see "Signing" below.
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install tools
+        run: brew install --quiet xcodegen create-dmg
+
+      # MLX compiles Metal shaders at build time, and Xcode 26 ships the Metal
+      # toolchain as a separate component. Only needed once the model tiers land,
+      # so it self-activates rather than costing every build a large download.
+      - name: Install Metal toolchain
+        if: hashFiles('Sources/OffprintML/**') != ''
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Test
+        run: swift test
+
+      - name: Build
+        run: |
+          xcodegen generate
+          xcodebuild archive \
+            -project Offprint.xcodeproj \
+            -scheme Offprint \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/Offprint.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO
+          mkdir -p "$RUNNER_TEMP/export"
+          cp -R "$RUNNER_TEMP/Offprint.xcarchive/Products/Applications/Offprint.app" \
+                "$RUNNER_TEMP/export/"
+
+      - name: Import Developer ID certificate
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERT"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+      - name: Sign
+        env:
+          SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+          APP="$RUNNER_TEMP/export/Offprint.app"
+          if [ -n "$MACOS_CERTIFICATE" ]; then
+            IDENTITY="$SIGNING_IDENTITY"
+          else
+            # Ad-hoc. A valid signature, just not one Apple can vouch for: the
+            # user gets "Apple could not verify" with an Open Anyway button,
+            # rather than the "damaged" dead end an unsigned app now hits.
+            IDENTITY="-"
+          fi
+          # Sign inside-out. `--deep` is discouraged by Apple and silently
+          # mis-signs nested code.
+          find "$APP/Contents" -type f \( -name "*.dylib" -o -name "*.framework" \) -print0 \
+            | xargs -0 -I{} codesign --force --timestamp --options runtime --sign "$IDENTITY" {} || true
+          codesign --force --timestamp --options runtime \
+            --entitlements Sources/OffprintApp/Offprint.entitlements \
+            --sign "$IDENTITY" "$APP"
+          codesign --verify --strict --verbose=2 "$APP"
+
+      - name: Build DMG
+        run: |
+          # No version in the filename, so
+          # /releases/latest/download/Offprint.dmg is a permanent link.
+          create-dmg \
+            --volname "Offprint" \
+            --window-size 540 380 \
+            --icon-size 110 \
+            --icon "Offprint.app" 140 180 \
+            --app-drop-link 400 180 \
+            --no-internet-enable \
+            "$RUNNER_TEMP/Offprint.dmg" \
+            "$RUNNER_TEMP/export/" \
+          || hdiutil create -volname Offprint -srcfolder "$RUNNER_TEMP/export" \
+               -ov -format UDZO "$RUNNER_TEMP/Offprint.dmg"
+
+      - name: Notarize and staple
+        if: env.ASC_KEY_P8 != ''
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          echo "$ASC_KEY_P8" | base64 --decode > "$KEY"
+          codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$RUNNER_TEMP/Offprint.dmg"
+          xcrun notarytool submit "$RUNNER_TEMP/Offprint.dmg" \
+            --key "$KEY" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
+          # Stapling lets Gatekeeper verify offline; without it first launch
+          # needs a network round trip and fails on an offline Mac.
+          xcrun stapler staple "$RUNNER_TEMP/Offprint.dmg"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="$RUNNER_TEMP/notes.md"
+          {
+            echo "### Install"
+            echo
+            echo '```sh'
+            echo "brew install --cask J0nasW/offprint/offprint"
+            echo '```'
+            echo
+            echo "Or download **Offprint.dmg** below."
+            if [ -z "$MACOS_CERTIFICATE" ]; then
+              echo
+              echo "> This build is ad-hoc signed rather than notarised."
+              echo "> On first launch macOS will say it cannot verify the developer:"
+              echo "> open **System Settings → Privacy & Security**, scroll to Security,"
+              echo "> and choose **Open Anyway**."
+            fi
+          } > "$NOTES"
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
+            --notes-file "$NOTES" "$RUNNER_TEMP/Offprint.dmg" \
+          || gh release upload "${GITHUB_REF_NAME}" "$RUNNER_TEMP/Offprint.dmg" --clobber
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

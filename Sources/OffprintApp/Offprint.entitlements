@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The App Sandbox is deliberately NOT enabled here.
+         Sandbox initialisation needs a team identity to anchor the app's
+         container; an ad-hoc signature has none, so a sandboxed ad-hoc build
+         traps in libsecinit before main() runs. Offprint ships ad-hoc signed
+         until there is a Developer ID, so enabling it would mean the app could
+         not launch for anyone.
+
+         To re-enable — for Developer ID or Mac App Store builds — set
+         ENABLE_APP_SANDBOX: YES in project.yml and restore:
+             com.apple.security.app-sandbox                  true
+             com.apple.security.files.user-selected.read-write true
+             com.apple.security.network.client               true
+         The code already claims and releases security-scoped access on every
+         dropped URL, so nothing else needs to change. -->
+
+    <!-- Hardened runtime is on; MLX compiles Metal shaders at runtime and will
+         need this once the model tiers land. -->
+    <key>com.apple.security.cs.allow-jit</key><true/>
+</dict>
+</plist>

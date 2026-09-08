@@ -113,7 +113,7 @@ public struct MarkdownWriter: Sendable {
     /// carries its text in the top-left slot and leaves the covered slots empty.
     /// That is lossy, but it is lossy *visibly* — and the full span survives in
     /// the JSON export, which is the format that cares.
-    static func flatten(_ table: Block.Table) -> [[String]] {
+    public static func flatten(_ table: Block.Table) -> [[String]] {
         let width = table.columnCount
         guard width > 0 else { return [] }
 

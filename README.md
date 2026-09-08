@@ -4,9 +4,23 @@ Turn PDFs into clean Markdown and structured JSON, entirely on your Mac.
 
 Drop a PDF in. Nothing is uploaded, nothing is logged, no account is needed.
 
-> **Status: in development.** The extraction engine and the Fast tier are working
-> and tested. The app UI, the GLM-OCR tiers, and release automation are not built
-> yet. See [Roadmap](#roadmap).
+> **Status: early.** The engine, the Fast tier, the app, and the release pipeline
+> are working. The GLM-OCR tiers (Balanced and Best) are not implemented yet — the
+> slider moves, but all three stops currently run the Fast pipeline. See
+> [Roadmap](#roadmap).
+
+## Install
+
+```sh
+brew install --cask J0nasW/offprint/offprint
+```
+
+Or download `Offprint.dmg` from [the latest release](https://github.com/J0nasW/offprint/releases/latest).
+
+Builds are **ad-hoc signed rather than notarised**, so on first launch macOS says
+it cannot verify the developer. Open **System Settings → Privacy & Security**,
+scroll to Security, and choose **Open Anyway**. Homebrew does not avoid this —
+`--no-quarantine` was removed from Homebrew in July 2026.
 
 ## Why local
 
@@ -61,7 +75,15 @@ Requires macOS 26, Xcode 26, Apple Silicon.
 ```bash
 swift build          # engine + harness
 swift test           # 28 tests, no Metal toolchain needed
+
+brew install xcodegen
+xcodegen generate    # writes Offprint.xcodeproj from project.yml
+xcodebuild -project Offprint.xcodeproj -scheme Offprint build
 ```
+
+The Xcode project is generated rather than checked in: SwiftPM's CLI cannot
+compile MLX's Metal shaders, so `xcodebuild` is required, but a checked-in
+`.xcodeproj` is unreadable in review.
 
 The engine splits into `OffprintCore` (no MLX — models, layout, serialisers) and,
 once the model tiers land, `OffprintML`. Everything valuable is in Core, so most
@@ -94,15 +116,20 @@ Three things cost real time and are worth writing down:
 - **Vision can split a table down the wrong axis**, and the result is still valid
   Markdown — nothing downstream can detect it. Tables carry a `structureSuspect`
   flag, and the Markdown says so.
+- **An ad-hoc signed app cannot use the App Sandbox.** Sandbox setup needs a team
+  identity to anchor the container, so the app traps in `libsecinit` before
+  `main()`. The sandbox is off until there is a Developer ID;
+  `Offprint.entitlements` documents exactly how to turn it back on.
 
 ## Roadmap
 
 - [x] Block model, Markdown + JSON serialisers, figure extraction
 - [x] Text-layer engine with column-aware reading order
 - [x] Apple Vision engine (tables, lists, headings)
-- [ ] SwiftUI app: drop zone, queue, quality slider, live preview
+- [x] SwiftUI app: drop zone, queue, quality slider, live preview
+- [x] Release pipeline, Homebrew cask, landing page
 - [ ] GLM-OCR via MLX Swift (Balanced and Best tiers)
-- [ ] Signed DMG, Homebrew tap, landing page
+- [ ] Notarised builds (needs an Apple Developer Program membership)
 
 ## Licence
 

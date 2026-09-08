@@ -129,12 +129,50 @@ what to read* rather than embedding everything and hoping similarity finds it.
   3.3 Abstract                             [2 chunks]
 ```
 
+## For agents (MCP)
+
+Offprint speaks the Model Context Protocol over stdio, so Claude Code, Claude
+Desktop, or any MCP client can read PDFs on this Mac.
+
+```sh
+claude mcp add offprint -- "/Applications/Offprint PDF to Markdown.app/Contents/MacOS/offprint" --mcp
+```
+
+The tools are deliberately not "convert this PDF and give me the text". A
+125-page report is ~64,000 tokens; returning it in one call spends most of an
+agent's context to answer something one section would have answered. So:
+
+| Tool | What it is for |
+|---|---|
+| `open_document` | Counts and the section outline. Start here. |
+| `get_outline` | Just the outline, with tokens and page ranges per section |
+| `read_section` | One section by id, e.g. `3.1` |
+| `search_document` | Ranked passages, with breadcrumb, pages and chunk id |
+| `read_chunk` | One chunk, optionally with neighbours, to widen a hit |
+| `export_document` | Write the full conversion to disk, return the paths |
+
+```
+eu_example.pdf — 125 pages, 41,022 words, ~63,582 tokens, 55 tables (1 unverified)
+
+OUTLINE
+3 Defining Artificial Intelligence 2.0     [1394 tokens · p.1–5]
+  3.7 1 Introduction                       [1490 tokens · p.12–13]
+  3.8 2 AI definitions                     [4 tokens · p.14]
+    3.8.1 2.1 Definitions in market, policy and research  [425 tokens · p.14]
+```
+
+Search is lexical, not semantic, on purpose: embedding a document would mean a
+second model download and an index, for a question usually answered by "which
+section mentions this". Heading matches score higher, because a term in a
+heading describes the whole section.
+
 ## Scripting
 
 The app doubles as its own CLI, which is also how the model tiers are measured:
 
 ```sh
-Offprint.app/Contents/MacOS/Offprint --convert paper.pdf --tier balanced --json --out ./out
+"/Applications/Offprint PDF to Markdown.app/Contents/MacOS/offprint" \
+  --convert paper.pdf --tier balanced --json --chunks --out ./out
 ```
 
 ## The harness

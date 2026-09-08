@@ -2,8 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- CFBundleName drives the menu bar and must stay short; CFBundleDisplayName
+         is what Finder and Spotlight show. -->
     <key>CFBundleName</key><string>Offprint</string>
-    <key>CFBundleDisplayName</key><string>Offprint</string>
+    <key>CFBundleDisplayName</key><string>Offprint PDF to Markdown</string>
+    <key>CFBundleExecutable</key><string>offprint</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>

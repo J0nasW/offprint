@@ -24,7 +24,7 @@ cask "offprint" do
   depends_on macos: ">= :tahoe"
   depends_on arch: :arm64
 
-  app "Offprint.app"
+  app "Offprint PDF to Markdown.app"
 
   zap trash: [
     "~/Library/Application Support/de.boostnow.Offprint",

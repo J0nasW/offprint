@@ -43,7 +43,7 @@ jobs:
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO
           mkdir -p "$RUNNER_TEMP/export"
-          cp -R "$RUNNER_TEMP/Offprint.xcarchive/Products/Applications/Offprint.app" \
+          cp -R "$RUNNER_TEMP/Offprint.xcarchive/Products/Applications/Offprint PDF to Markdown.app" \
                 "$RUNNER_TEMP/export/"
 
       - name: Import Developer ID certificate
@@ -68,7 +68,7 @@ jobs:
         env:
           SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
         run: |
-          APP="$RUNNER_TEMP/export/Offprint.app"
+          APP="$RUNNER_TEMP/export/Offprint PDF to Markdown.app"
           if [ -n "$MACOS_CERTIFICATE" ]; then
             IDENTITY="$SIGNING_IDENTITY"
           else
@@ -94,7 +94,7 @@ jobs:
             --volname "Offprint" \
             --window-size 540 380 \
             --icon-size 110 \
-            --icon "Offprint.app" 140 180 \
+            --icon "Offprint PDF to Markdown.app" 140 180 \
             --app-drop-link 400 180 \
             --no-internet-enable \
             "$RUNNER_TEMP/Offprint.dmg" \

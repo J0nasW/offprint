@@ -9,14 +9,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let didOpen = Notification.Name("OffprintDidOpenFiles")
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // No Dock icon, no menu bar, no window for a `--convert` run.
-        if Headless.isRequested { NSApp.setActivationPolicy(.prohibited) }
+        // No Dock icon, no menu bar, no window for a `--convert` or `--mcp` run.
+        if Headless.isRequested || MCPMode.isRequested {
+            NSApp.setActivationPolicy(.prohibited)
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless work is started here rather than from App.init: almost
         // everything in this target is MainActor-isolated by default, so
         // blocking the main thread to wait for it deadlocks instead of running.
+        if MCPMode.isRequested {
+            Task.detached(priority: .userInitiated) { await MCPMode.run() }
+            return
+        }
         guard Headless.isRequested else { return }
         Task { await Headless.run() }
     }

@@ -93,6 +93,11 @@ public enum HeadingHeuristic {
         guard text.count >= 2 else { return false }
         // Sentence-ending punctuation is strong evidence of prose.
         if text.hasSuffix(".") && text.count > 60 { return false }
+        // A heading starts with a capital, a digit, or a symbol — never a
+        // lowercase word. A fragment like "its evolution." is the tail of a
+        // sentence that happened to be set apart, and promoting it puts prose
+        // into the outline every chunk beneath it then inherits.
+        if let first = text.first, first.isLowercase { return false }
 
         // A numbered section title is a heading however it is set. Some styles
         // distinguish subsections by weight alone, or by nothing beyond the

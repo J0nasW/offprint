@@ -158,6 +158,25 @@ public struct MarkdownWriter: Sendable {
     /// extracted prose unreadable in source form, which is half of why anyone
     /// wants Markdown instead of JSON.
     static func escapeInline(_ s: String) -> String {
+        // Maths spans pass through untouched. Escaping inside one turns
+        // `$A_{1}$` into `$A\_{1}$`, which renders as a literal underscore and
+        // breaks the formula — and formulas are most of why a scientific paper
+        // goes through a model at all.
+        guard s.contains("$") else { return escapeOutsideMath(s) }
+        var out = ""
+        var rest = Substring(s)
+        while let open = rest.firstIndex(of: "$") {
+            let after = rest.index(after: open)
+            guard let close = rest[after...].firstIndex(of: "$") else { break }
+            out += escapeOutsideMath(String(rest[rest.startIndex..<open]))
+            out += String(rest[open...close])
+            rest = rest[rest.index(after: close)...]
+        }
+        out += escapeOutsideMath(String(rest))
+        return out
+    }
+
+    static func escapeOutsideMath(_ s: String) -> String {
         // Characters that always change the rendering, wherever they appear.
         let alwaysEscaped: Set<Character> = ["\\", "`", "*", "_", "[", "]", "<"]
         // Characters that only matter as the first thing on a line, and even then

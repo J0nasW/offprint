@@ -144,6 +144,25 @@ public nonisolated struct GLMOCRExtractor: PageOCREngine, Sendable {
             if text.hasSuffix("```") { text = String(text.dropLast(3)) }
             break
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.tightenMath(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Removes the padding GLM-OCR puts inside maths delimiters.
+    ///
+    /// The model writes `$ x_{1} $`. CommonMark maths — GitHub's included —
+    /// requires the delimiters to hug their content, so the padded form renders
+    /// as literal dollar signs.
+    static func tightenMath(_ text: String) -> String {
+        var out = ""
+        var rest = Substring(text)
+        while let open = rest.firstIndex(of: "$") {
+            let afterOpen = rest.index(after: open)
+            guard let close = rest[afterOpen...].firstIndex(of: "$") else { break }
+            let inner = rest[afterOpen..<close].trimmingCharacters(in: .whitespaces)
+            out += rest[rest.startIndex..<open]
+            out += inner.isEmpty ? "$$" : "$" + inner + "$"
+            rest = rest[rest.index(after: close)...]
+        }
+        return out + rest
     }
 }

@@ -88,3 +88,12 @@ extension BoundingBox {
         for v in [x, y, width, height] { try c.encode((v * 100).rounded() / 100) }
     }
 }
+
+extension Character {
+    /// The characters Markdown escapes with a backslash.
+    var isASCIIPunctuation: Bool {
+        guard let ascii = asciiValue else { return false }
+        return (33...47).contains(ascii) || (58...64).contains(ascii)
+            || (91...96).contains(ascii) || (123...126).contains(ascii)
+    }
+}

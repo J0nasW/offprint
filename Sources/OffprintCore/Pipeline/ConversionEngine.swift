@@ -296,7 +296,7 @@ public actor ConversionEngine {
             let crop = region.bbox.inset(by: -6)
             guard let image = try? renderer.render(page, crop: crop, dpi: renderer.dpi) else { continue }
             let read = try await ocrEngine.read(region: image, kind: region.kind)
-            blocks += read.map { $0.positioned(at: region.bbox) }
+            blocks += Self.place(read, in: region)
         }
 
         return PageContent(index: index, width: Double(pageSize.width),
@@ -374,6 +374,27 @@ public actor ConversionEngine {
             blocks = Self.splice(figure, at: envelope, into: blocks)
         }
         return blocks
+    }
+
+    /// Puts a region's transcription back into the structure the layout found.
+    static func place(_ blocks: [Block], in region: PageRegion) -> [Block] {
+        guard let level = region.headingLevel else {
+            return blocks.map { $0.positioned(at: region.bbox) }
+        }
+        // A heading region should come back as one heading. If the model split
+        // it, the first piece is the title and the rest follows as prose.
+        var out: [Block] = []
+        for (index, block) in blocks.enumerated() {
+            let text = block.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            if index == 0 {
+                out.append(.heading(.init(level: level, text: text, bbox: region.bbox,
+                                          fontSize: region.fontSize)))
+            } else {
+                out.append(block.positioned(at: region.bbox))
+            }
+        }
+        return out
     }
 
     /// Inserts a block ahead of the first block it precedes on the page.

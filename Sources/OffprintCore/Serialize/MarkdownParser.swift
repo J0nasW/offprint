@@ -244,20 +244,24 @@ public struct MarkdownParser: Sendable {
 
     /// Removes backslash escapes, so a round trip through the writer and back
     /// returns the original text rather than accumulating backslashes.
+    ///
+    /// Only a backslash before punctuation is an escape. A backslash before a
+    /// letter starts a LaTeX command, and stripping those turns the formula a
+    /// model just read — `\mathcal{A}` — into the word `mathcal{A}`.
     static func unescape(_ text: String) -> String {
         var out = ""
-        var escaped = false
-        for character in text {
-            if escaped {
-                out.append(character)
-                escaped = false
-            } else if character == "\\" {
-                escaped = true
-            } else {
-                out.append(character)
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            let next = text.index(after: index)
+            if character == "\\", next < text.endIndex, text[next].isASCIIPunctuation {
+                out.append(text[next])
+                index = text.index(after: next)
+                continue
             }
+            out.append(character)
+            index = next
         }
-        if escaped { out.append("\\") }
         return out
     }
 }

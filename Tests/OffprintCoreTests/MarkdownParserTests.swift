@@ -137,3 +137,44 @@ struct MarkdownParserTests {
         }
     }
 }
+
+@Suite("Maths round trip")
+struct MathRoundTripTests {
+
+    @Test("LaTeX commands survive parsing")
+    func keepsLatexCommands() {
+        // A backslash before a letter starts a LaTeX command; only a backslash
+        // before punctuation is a Markdown escape. Stripping both turns
+        // \mathcal{A} into the word mathcal{A}.
+        let blocks = MarkdownParser().parse("The set $\\mathcal{A} = \\{A_1, \\dots\\}$ is fixed.")
+        #expect(blocks.first?.plainText.contains("\\mathcal{A}") == true)
+        #expect(blocks.first?.plainText.contains("\\dots") == true)
+    }
+
+    @Test("Markdown escapes are still removed")
+    func stillUnescapesPunctuation() {
+        let blocks = MarkdownParser().parse("a \\* b \\_ c")
+        #expect(blocks.first?.plainText == "a * b _ c")
+    }
+
+    @Test("Maths spans are not escaped on the way out")
+    func doesNotEscapeInsideMath() {
+        // `$A_{1}$` escaped becomes `$A\_{1}$`, which renders as a literal
+        // underscore and breaks the formula.
+        let out = MarkdownWriter().write(blocks: [
+            .paragraph(.init(text: "Given $A_{1}$ and $\\mathcal{B}$, the value_here is set.")),
+        ])
+        #expect(out.contains("$A_{1}$"))
+        #expect(out.contains("$\\mathcal{B}$"))
+        // Outside maths, escaping still happens.
+        #expect(out.contains("value\\_here"))
+    }
+
+    @Test("A formula survives a full write and re-parse")
+    func roundTripsFormula() {
+        let original = "Embed $s_{j,1}$ with $\\mathcal{M}$ to get $e_{j}$."
+        let markdown = MarkdownWriter().write(blocks: [.paragraph(.init(text: original))])
+        let back = MarkdownParser().parse(markdown)
+        #expect(back.first?.plainText == original)
+    }
+}

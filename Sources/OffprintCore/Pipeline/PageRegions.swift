@@ -16,11 +16,22 @@ public struct PageRegion: Sendable, Hashable {
     public var bbox: BoundingBox
     /// Text already known for this region, when it came from the text layer.
     public var knownText: String?
+    /// Heading level, when the layout stage recognised this region as one.
+    ///
+    /// The model reads characters, not structure: asked to transcribe a heading
+    /// region it returns the words with no indication that they are a heading.
+    /// The layout stage already knows, so it says so here and the model's text
+    /// is placed into it.
+    public var headingLevel: Int?
+    public var fontSize: Double?
 
-    public init(kind: RegionKind, bbox: BoundingBox, knownText: String? = nil) {
+    public init(kind: RegionKind, bbox: BoundingBox, knownText: String? = nil,
+                headingLevel: Int? = nil, fontSize: Double? = nil) {
         self.kind = kind
         self.bbox = bbox
         self.knownText = knownText
+        self.headingLevel = headingLevel
+        self.fontSize = fontSize
     }
 }
 
@@ -53,13 +64,27 @@ public enum PageRegionFinder {
 
         let remaining = layout.lines.indices.filter { !consumed.contains($0) }
         let paragraphs = TextLayerGeometry.paragraphs(from: remaining.map { layout.lines[$0] })
+
+        // Classify here as well, so the structure the text layer can see is not
+        // thrown away when the model rereads the characters.
+        let classified = HeadingHeuristic.classify(paragraphs.map { paragraph in
+            .init(text: paragraph.text, bbox: paragraph.bbox,
+                  lineCount: paragraph.lines.count,
+                  fontSize: paragraph.lines.map(\.fontSize).max(),
+                  isBold: paragraph.lines.allSatisfy(\.isBold))
+        })
+
         var cursor = 0
-        for paragraph in paragraphs {
+        for (index, paragraph) in paragraphs.enumerated() {
             let key = remaining.indices.contains(cursor) ? remaining[cursor] : layout.lines.count
             cursor += paragraph.lines.count
             let text = paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            keyed.append((key, PageRegion(kind: .text, bbox: paragraph.bbox, knownText: text)))
+            var level: Int?
+            if case .heading(let found) = classified[index] { level = found }
+            keyed.append((key, PageRegion(kind: .text, bbox: paragraph.bbox, knownText: text,
+                                          headingLevel: level,
+                                          fontSize: paragraph.lines.map(\.fontSize).max())))
         }
 
         return keyed
@@ -91,6 +116,12 @@ public enum PageRegionFinder {
         var out: [PageRegion] = []
         for region in regions {
             guard region.kind == .text, var last = out.last, last.kind == .text else {
+                out.append(region)
+                continue
+            }
+            // Never merge a heading into the prose around it: the level would
+            // be lost and the outline with it.
+            guard last.headingLevel == nil, region.headingLevel == nil else {
                 out.append(region)
                 continue
             }

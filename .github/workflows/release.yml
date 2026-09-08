@@ -24,10 +24,8 @@ jobs:
         run: brew install --quiet xcodegen create-dmg
 
       # MLX compiles Metal shaders at build time, and Xcode 26 ships the Metal
-      # toolchain as a separate component. Only needed once the model tiers land,
-      # so it self-activates rather than costing every build a large download.
+      # toolchain as a separate component that is not installed by default.
       - name: Install Metal toolchain
-        if: hashFiles('Sources/OffprintML/**') != ''
         run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Test
@@ -41,6 +39,8 @@ jobs:
             -scheme Offprint \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/Offprint.xcarchive" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO
           mkdir -p "$RUNNER_TEMP/export"
           cp -R "$RUNNER_TEMP/Offprint.xcarchive/Products/Applications/Offprint.app" \

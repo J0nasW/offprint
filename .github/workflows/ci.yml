@@ -25,6 +25,11 @@ jobs:
       - name: Test the engine
         run: swift test
 
+      # MLX compiles Metal shaders at build time, and Xcode 26 ships the Metal
+      # toolchain as a separate component that is not installed by default.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Build the app
         run: |
           brew install --quiet xcodegen
@@ -33,7 +38,6 @@ jobs:
             -project Offprint.xcodeproj \
             -scheme Offprint \
             -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify || xcodebuild build \
-            -project Offprint.xcodeproj -scheme Offprint -configuration Release \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO

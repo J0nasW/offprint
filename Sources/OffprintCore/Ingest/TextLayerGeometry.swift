@@ -479,9 +479,13 @@ public enum TextLayerGeometry {
             let columnBreak = line.column != previous.column
             let indented = line.bbox.minX - previous.bbox.minX > median * 0.9
             // A real change of type size starts something new — most often a
-            // heading. Compared against the type size, not the box height.
+            // heading. The threshold is tight because `fontSize` is a true point
+            // size read from the font, stable to within about 1% inside a
+            // paragraph. At the old 1.25 a section heading set at 10.8pt above
+            // 8.2pt body was merged into the paragraph below it and never
+            // reached heading detection at all.
             let sizeChange = max(line.fontSize, previous.fontSize)
-                           > min(line.fontSize, previous.fontSize) * 1.25
+                           > min(line.fontSize, previous.fontSize) * 1.06
                           || line.isBold != previous.isBold
             // A numbered section title set in the body face is invisible to
             // every other test here, and merging it into the paragraph below

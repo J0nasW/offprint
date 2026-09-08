@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A rectangle in PDF points with the origin at the **top-left** of the page.
@@ -57,6 +58,12 @@ public struct BoundingBox: Codable, Sendable, Hashable {
 
     public func inset(by d: Double) -> BoundingBox {
         BoundingBox(x: x + d, y: y + d, width: width - 2 * d, height: height - 2 * d)
+    }
+
+    /// Clipped to a page of the given size.
+    public func clamped(to size: CGSize) -> BoundingBox {
+        intersection(BoundingBox(x: 0, y: 0,
+                                 width: Double(size.width), height: Double(size.height)))
     }
 
     public func scaled(by f: Double) -> BoundingBox {

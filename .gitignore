@@ -7,3 +7,8 @@ DerivedData/
 build/
 dist/
 Fixtures/out/
+
+# Test documents stay local. They are someone else's copyright as often as not,
+# and a public repo is the wrong place for them.
+*.pdf
+!docs/**/*.pdf

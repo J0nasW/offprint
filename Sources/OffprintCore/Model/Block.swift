@@ -162,6 +162,23 @@ extension Block {
         }
     }
 
+    /// Returns a copy positioned at `box`.
+    ///
+    /// Blocks parsed from a model's Markdown carry no geometry; the region they
+    /// were read from supplies it, which keeps figure cropping, reading order
+    /// and the JSON export working for model-read pages too.
+    public func positioned(at box: BoundingBox) -> Block {
+        switch self {
+        case .heading(var b):   b.bbox = box; return .heading(b)
+        case .paragraph(var b): b.bbox = box; return .paragraph(b)
+        case .list(var b):      b.bbox = box; return .list(b)
+        case .table(var b):     b.bbox = box; return .table(b)
+        case .figure(var b):    b.bbox = box; return .figure(b)
+        case .formula(var b):   b.bbox = box; return .formula(b)
+        case .code(var b):      b.bbox = box; return .code(b)
+        }
+    }
+
     public var typeName: String {
         switch self {
         case .heading:   return "heading"

@@ -74,19 +74,34 @@ public struct FigureDetector: Sendable {
         let components = Self.connectedComponents(ink, cols: cols, rows: rows)
         let pageArea = Double(pageSize.width) * Double(pageSize.height)
 
-        return components.compactMap { component -> Region? in
-            let box = BoundingBox(
+        struct Candidate { var box: BoundingBox; var inked: Int }
+        var candidates: [Candidate] = components.map { component in
+            Candidate(box: BoundingBox(
                 x: Double(component.minCol) * cellW,
                 y: Double(component.minRow) * cellH,
                 width: Double(component.maxCol - component.minCol + 1) * cellW,
-                height: Double(component.maxRow - component.minRow + 1) * cellH
-            )
+                height: Double(component.maxRow - component.minRow + 1) * cellH),
+                inked: component.count)
+        }
+
+        // Merge pieces that plainly belong to one figure before judging them.
+        //
+        // A line chart is mostly white: its axes, its curve and each of its
+        // labels land in separate connected components, none of which is large
+        // or dense enough on its own to survive. Judged separately, a full-page
+        // multi-panel figure comes back as one thin sliver of an axis.
+        candidates = Self.merge(candidates.map { ($0.box, $0.inked) },
+                                gap: min(Double(pageSize.width), Double(pageSize.height)) * 0.045)
+            .map { Candidate(box: $0.0, inked: $0.1) }
+
+        return candidates.compactMap { candidate -> Region? in
+            let box = candidate.box
             guard box.area / pageArea >= configuration.minimumAreaFraction else { return nil }
-            let cells = Double((component.maxCol - component.minCol + 1)
-                             * (component.maxRow - component.minRow + 1))
-            let density = cells > 0 ? Double(component.count) / cells : 0
-            // A very sparse component is a rule, a border, or scattered speckle.
-            guard density >= 0.18 else { return nil }
+            let cells = max(1.0, (box.width / cellW) * (box.height / cellH))
+            let density = Double(candidate.inked) / cells
+            // Sparse is expected of a chart; this only rejects a lone rule or
+            // scattered speckle.
+            guard density >= 0.04 else { return nil }
             // Ignore slivers: a figure has some extent in both directions.
             guard box.width > Double(pageSize.width) * 0.05,
                   box.height > Double(pageSize.height) * 0.02 else { return nil }
@@ -154,6 +169,27 @@ public struct FigureDetector: Sendable {
             }
         }
         return grid
+    }
+
+    /// Repeatedly unions boxes that sit within `gap` of one another.
+    static func merge(_ input: [(BoundingBox, Int)], gap: Double) -> [(BoundingBox, Int)] {
+        var boxes = input
+        var merged = true
+        while merged {
+            merged = false
+            outer: for i in boxes.indices {
+                for j in boxes.indices where j > i {
+                    let a = boxes[i].0.inset(by: -gap / 2)
+                    let b = boxes[j].0.inset(by: -gap / 2)
+                    guard a.intersection(b).area > 0 else { continue }
+                    boxes[i] = (boxes[i].0.union(boxes[j].0), boxes[i].1 + boxes[j].1)
+                    boxes.remove(at: j)
+                    merged = true
+                    break outer
+                }
+            }
+        }
+        return boxes
     }
 
     // MARK: - Connected components

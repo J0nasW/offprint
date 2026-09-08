@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, no menu bar, no window for a `--convert` or `--mcp` run.
-        if Headless.isRequested || MCPMode.isRequested {
+        if Headless.isRequested || MCPMode.isRequested || Probe.isRequested {
             NSApp.setActivationPolicy(.prohibited)
         }
     }
@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Headless work is started here rather than from App.init: almost
         // everything in this target is MainActor-isolated by default, so
         // blocking the main thread to wait for it deadlocks instead of running.
+        if Probe.isRequested {
+            Task { await Probe.run() }
+            return
+        }
         if MCPMode.isRequested {
             Task.detached(priority: .userInitiated) { await MCPMode.run() }
             return

@@ -11,6 +11,25 @@ public protocol PageOCREngine: Sendable {
     /// Resolution the engine wants its page images rendered at.
     var preferredDPI: Double { get }
     func extract(image: CGImage, pageSize: CGSize, pageIndex: Int) async throws -> PageContent
+
+    /// Whether the engine should be handed regions rather than whole pages.
+    ///
+    /// Document OCR models of this class are trained on regions: given a whole
+    /// two-column page GLM-OCR recovers about a fifth of the text and stops,
+    /// while the same page as paragraph crops comes back complete.
+    var prefersRegions: Bool { get }
+
+    /// Reads one region of a page.
+    func read(region: CGImage, kind: RegionKind) async throws -> [Block]
+
+    /// Largest region height, in points, the engine reads reliably in one pass.
+    var maximumRegionHeight: Double { get }
+}
+
+extension PageOCREngine {
+    public var prefersRegions: Bool { false }
+    public var maximumRegionHeight: Double { 260 }
+    public func read(region: CGImage, kind: RegionKind) async throws -> [Block] { [] }
 }
 
 extension VisionExtractor: PageOCREngine {

@@ -99,6 +99,15 @@ public enum HeadingHeuristic {
         // into the outline every chunk beneath it then inherits.
         if let first = text.first, first.isLowercase { return false }
 
+        // Chart furniture: axis labels and legends are short, set apart, and
+        // often in their own size, so they look exactly like headings. What
+        // gives them away is arithmetic — digits and equals signs where a title
+        // would have words.
+        if looksLikeChartLabel(text) { return false }
+        // A numbered entry in a bibliography has the same shape as a numbered
+        // section title. Author initials and ampersands are what separate them.
+        if looksLikeCitation(text) { return false }
+
         // A numbered section title is a heading however it is set. Some styles
         // distinguish subsections by weight alone, or by nothing beyond the
         // number itself — and those are exactly the headings a size test misses.
@@ -120,6 +129,40 @@ public enum HeadingHeuristic {
 }
 
 extension HeadingHeuristic {
+
+    /// Whether a line reads as a chart's axis labels or legend.
+    static func looksLikeChartLabel(_ text: String) -> Bool {
+        // An equals sign or a percentage belongs to a plotted statistic, not a
+        // title: "Pearson's r = 0.841", "Political science 0.5 27%".
+        if text.contains("=") { return true }
+        let digits = text.filter(\.isNumber).count
+        if text.contains("%") && digits > 0 { return true }
+        let letters = text.filter(\.isLetter).count
+        guard letters > 0 else { return true }
+        // A section number is one or two digits against a whole title, well
+        // under this; an axis label is mostly numbers.
+        return Double(digits) / Double(max(1, digits + letters)) > 0.18
+    }
+
+    /// Whether a line reads as a bibliography entry rather than a section title.
+    static func looksLikeCitation(_ text: String) -> Bool {
+        if text.contains(" et al.") { return true }
+        // "Iansiti, M. & Lakhani, K. R." — an ampersand joining named authors.
+        if text.contains(" & ") { return true }
+        // Initials: a comma, a capital, a period.
+        var previous: Character?
+        var beforePrevious: Character?
+        for character in text {
+            if character == ".", let p = previous, p.isUppercase,
+               let b = beforePrevious, b == " " || b == "," {
+                return true
+            }
+            beforePrevious = previous
+            previous = character
+        }
+        return false
+    }
+
     /// Re-ranks heading levels across a whole document.
     ///
     /// Each page is classified against its own typography, which is right for
@@ -127,6 +170,39 @@ extension HeadingHeuristic {
     /// depth: a page holding only section headings has nothing larger to compare
     /// them to and calls them all h1. Ranking the distinct sizes once, over the
     /// entire document, restores a consistent outline.
+    /// Titles that mark the point after which numbering stops meaning sections.
+    static let bibliographyTitles: Set<String> = [
+        "references", "bibliography", "works cited", "literature",
+        "literatur", "literaturverzeichnis", "quellen",
+    ]
+
+    /// Demotes numbered entries that follow a bibliography heading.
+    ///
+    /// "98. World Intellectual Property Organization" is shaped exactly like a
+    /// numbered section title, and no test on the line itself can tell them
+    /// apart. Its position can: once a document reaches its references, a
+    /// numbered line is an entry in them.
+    public static func demoteBibliographyEntries(_ pages: [PageContent]) -> [PageContent] {
+        var reachedBibliography = false
+        return pages.map { page in
+            var page = page
+            page.blocks = page.blocks.map { block in
+                guard case .heading(let heading) = block else { return block }
+                let title = heading.text
+                    .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if bibliographyTitles.contains(title) {
+                    reachedBibliography = true
+                    return block
+                }
+                guard reachedBibliography, sectionDepth(of: heading.text) != nil else {
+                    return block
+                }
+                return .paragraph(.init(text: heading.text, bbox: heading.bbox))
+            }
+            return page
+        }
+    }
+
     public static func normalizeLevels(_ pages: [PageContent]) -> [PageContent] {
         let sizes = pages
             .flatMap(\.blocks)

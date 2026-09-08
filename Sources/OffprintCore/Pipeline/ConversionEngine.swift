@@ -152,7 +152,11 @@ public actor ConversionEngine {
             emit(.page(content))
         }
 
-        // Heading depth is a whole-document property; see `normalizeLevels`.
+        // Both of these need the whole document: furniture is recognised by
+        // repeating in place across pages, and heading depth by comparing every
+        // heading in the document rather than the ones on one page.
+        pages = RunningContentFilter.strip(pages)
+        pages = HeadingHeuristic.demoteBibliographyEntries(pages)
         pages = HeadingHeuristic.normalizeLevels(pages)
 
         var document = OffprintDocument(
@@ -231,10 +235,57 @@ public actor ConversionEngine {
     }
 
     private func ocr(page: PDFPage, index: Int, renderer: PDFRenderer) async throws -> PageContent {
+        if ocrEngine.prefersRegions {
+            return try await ocrByRegion(page: page, index: index, renderer: renderer)
+        }
         let image = try renderer.render(page)
         return try await ocrEngine.extract(image: image,
                                            pageSize: renderer.pageSize(page),
                                            pageIndex: index)
+    }
+
+    /// Reads a page one region at a time.
+    ///
+    /// Measured on a dense two-column journal page: the whole page in one pass
+    /// recovers 20% of the text, each column in one pass 34%, and eleven
+    /// paragraph-sized regions 104% — the model is trained to read regions, and
+    /// giving it a page is simply the wrong input.
+    private func ocrByRegion(page: PDFPage, index: Int,
+                             renderer: PDFRenderer) async throws -> PageContent {
+        let start = Date()
+        let pageSize = renderer.pageSize(page)
+
+        // The text layer's boxes are exact and free; Vision is the fallback for
+        // pages that have none.
+        var regions = PageRegionFinder.regions(fromTextLayerOf: page)
+        if regions.isEmpty {
+            let image = try renderer.render(page)
+            let vision = try await VisionExtractor().extract(image: image, pageSize: pageSize,
+                                                             pageIndex: index)
+            regions = PageRegionFinder.regions(fromVisionOf: vision.blocks)
+        }
+        guard !regions.isEmpty else {
+            let image = try renderer.render(page)
+            return try await ocrEngine.extract(image: image, pageSize: pageSize, pageIndex: index)
+        }
+
+        regions = PageRegionFinder.coalesce(regions, pageWidth: Double(pageSize.width),
+                                            maximumHeight: ocrEngine.maximumRegionHeight)
+
+        var blocks: [Block] = []
+        for region in regions {
+            try Task.checkCancellation()
+            // A little padding: a crop flush against the glyphs clips ascenders
+            // and the model reads the first line badly.
+            let crop = region.bbox.inset(by: -6)
+            guard let image = try? renderer.render(page, crop: crop, dpi: renderer.dpi) else { continue }
+            let read = try await ocrEngine.read(region: image, kind: region.kind)
+            blocks += read.map { $0.positioned(at: region.bbox) }
+        }
+
+        return PageContent(index: index, width: Double(pageSize.width),
+                           height: Double(pageSize.height), blocks: blocks,
+                           engine: .glmOCRLayout, duration: Date().timeIntervalSince(start))
     }
 
     /// Detects figures and splices them into the block list in reading order.
@@ -252,15 +303,72 @@ public actor ConversionEngine {
         guard !regions.isEmpty else { return content.blocks }
 
         var blocks = content.blocks
-        for (n, region) in regions.enumerated() {
+
+        // Absorb a chart's own lettering. Axis labels, legends and panel letters
+        // are text, so figure detection — which looks for ink the text engines
+        // did not claim — carves around them and leaves them behind as stray
+        // paragraphs. They are short and set in their own size, which is exactly
+        // the shape of a heading, so they end up in the outline: "Political
+        // science 0.5 27%" as a section title.
+        // The envelope has to grow: figure detection erases the cells its own
+        // labels sit in, so the ink region is carved around them and a fixed
+        // reach never touches an axis label. Growing until nothing new is caught
+        // walks outward along the lettering instead.
+        var absorbed = Set<Int>()
+        var envelopes: [BoundingBox] = regions.map(\.bbox)
+        for index in envelopes.indices {
+            var changed = true
+            while changed {
+                changed = false
+                let reach = envelopes[index].inset(by: -22)
+                for (blockIndex, block) in blocks.enumerated() where !absorbed.contains(blockIndex) {
+                    guard let box = block.bbox, Self.isChartLettering(block),
+                          box.coverage(by: reach) > 0.6 else { continue }
+                    absorbed.insert(blockIndex)
+                    envelopes[index] = envelopes[index].union(box)
+                    changed = true
+                }
+            }
+        }
+        if !absorbed.isEmpty {
+            blocks = blocks.enumerated()
+                .filter { !absorbed.contains($0.offset) }
+                .map(\.element)
+        }
+
+        // Growing can walk an envelope past the paper: clip it back, or the
+        // exported crop is mostly blank and the reading-order sort is thrown by
+        // a block that starts off-page.
+        envelopes = envelopes.map { $0.clamped(to: pageSize) }
+
+        for (n, envelope) in envelopes.enumerated() {
             let name = String(format: "p%03d-fig%02d.png", content.index + 1, n + 1)
+            // Crop the grown envelope, so the exported image includes the axis
+            // labels and legend rather than a bare plotting area.
             blocks.append(.figure(.init(
                 path: "images/\(name)",
-                caption: Self.caption(near: region.bbox, in: content.blocks),
-                bbox: region.bbox
+                caption: Self.caption(near: envelope, in: content.blocks),
+                bbox: envelope
             )))
         }
         return ReadingOrder.sort(blocks, pageWidth: content.width) { $0.bbox }
+    }
+
+    /// Whether a block reads as lettering inside a chart rather than prose.
+    ///
+    /// The test is deliberately conservative: a real caption sits below the
+    /// figure and is a sentence, and absorbing one would lose information that
+    /// belongs in the output.
+    static func isChartLettering(_ block: Block) -> Bool {
+        switch block {
+        case .paragraph, .heading: break
+        default: return false
+        }
+        let text = block.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 90 else { return false }
+        // A sentence is a caption, not a label.
+        if text.hasSuffix(".") && text.split(separator: " ").count > 6 { return false }
+        return true
     }
 
     /// A short line of text directly beneath a figure is almost always its caption.

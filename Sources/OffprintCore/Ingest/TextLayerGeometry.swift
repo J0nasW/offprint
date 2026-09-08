@@ -462,6 +462,12 @@ public enum TextLayerGeometry {
         let sizes = lines.map(\.fontSize).filter { $0 > 0 }.sorted()
         let median = sizes.isEmpty ? medianHeight(lines.map(\.bbox)) : sizes[sizes.count / 2]
 
+        // Widest line in each column, which is what a full measure looks like.
+        var columnWidth: [Int: Double] = [:]
+        for line in lines {
+            columnWidth[line.column] = max(columnWidth[line.column] ?? 0, line.bbox.width)
+        }
+
         var paragraphs: [Paragraph] = []
         var current: [Line] = []
 
@@ -477,7 +483,12 @@ public enum TextLayerGeometry {
             let gap = line.bbox.minY - previous.bbox.maxY
             let bigGap = gap > median * 0.75
             let columnBreak = line.column != previous.column
-            let indented = line.bbox.minX - previous.bbox.minX > median * 0.9
+            // A first-line indent starts a paragraph only in body text. Above
+            // body size the offset is centring or a hanging indent, and treating
+            // it as a break splits a two-line heading in half — "5 Evaluating
+            // Semantic Embedding" from "Capabilities".
+            let isBodySized = line.fontSize <= median * 1.05
+            let indented = isBodySized && line.bbox.minX - previous.bbox.minX > median * 0.9
             // A real change of type size starts something new — most often a
             // heading. The threshold is tight because `fontSize` is a true point
             // size read from the font, stable to within about 1% inside a
@@ -491,7 +502,20 @@ public enum TextLayerGeometry {
             // every other test here, and merging it into the paragraph below
             // loses the heading entirely.
             let startsSection = HeadingHeuristic.sectionDepth(of: line.text) != nil
-            if bigGap || columnBreak || indented || sizeChange || startsSection { flush() }
+            // A section title set at body size is separated from the sentence
+            // after it by nothing but its length. Some styles do that for every
+            // subsection, and without this "5.1 Generalization to Longer Texts"
+            // absorbs the paragraph beneath it and stops being a heading at all.
+            let openedWithSection = current.first.map {
+                HeadingHeuristic.sectionDepth(of: $0.text) != nil
+            } ?? false
+            let measure = columnWidth[line.column] ?? line.bbox.width
+            let isFullMeasure = line.bbox.width >= measure * 0.9
+            let endsTitle = openedWithSection && isFullMeasure
+
+            if bigGap || columnBreak || indented || sizeChange || startsSection || endsTitle {
+                flush()
+            }
             current.append(line)
         }
         flush()

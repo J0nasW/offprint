@@ -89,7 +89,9 @@ public struct TextLayerExtractor: Sendable {
                 keyed.append((key, .heading(.init(level: level, text: text, bbox: paragraph.bbox,
                                                   fontSize: paragraph.lines.map(\.fontSize).max()))))
             case .paragraph:
-                keyed.append((key, .paragraph(.init(text: text, bbox: paragraph.bbox))))
+                keyed.append((key, .paragraph(.init(
+                    text: text, bbox: paragraph.bbox,
+                    fontSize: paragraph.lines.map(\.fontSize).max()))))
             }
         }
 

@@ -135,12 +135,18 @@ extension HeadingHeuristic {
         // An equals sign or a percentage belongs to a plotted statistic, not a
         // title: "Pearson's r = 0.841", "Political science 0.5 27%".
         if text.contains("=") { return true }
-        let digits = text.filter(\.isNumber).count
-        if text.contains("%") && digits > 0 { return true }
-        let letters = text.filter(\.isLetter).count
+        // Measure the title, not its section number: "4.1 Dataset" is 22%
+        // digits and would otherwise be thrown out as an axis label.
+        var body = text
+        if sectionDepth(of: text) != nil,
+           let space = text.firstIndex(where: { $0 == " " || $0 == "\t" }) {
+            body = String(text[text.index(after: space)...])
+        }
+        let digits = body.filter(\.isNumber).count
+        if body.contains("%") && digits > 0 { return true }
+        let letters = body.filter(\.isLetter).count
         guard letters > 0 else { return true }
-        // A section number is one or two digits against a whole title, well
-        // under this; an axis label is mostly numbers.
+        // An axis label is mostly numbers; a title is words.
         return Double(digits) / Double(max(1, digits + letters)) > 0.18
     }
 
@@ -161,6 +167,51 @@ extension HeadingHeuristic {
             previous = character
         }
         return false
+    }
+
+    /// The type size the document sets its body text in.
+    ///
+    /// Measured by character mass rather than by counting blocks: body text is
+    /// whatever most of the document's characters are set in, and that is stable
+    /// even on a page that is mostly figure.
+    public static func documentBodySize(_ pages: [PageContent]) -> Double? {
+        var mass: [Double: Int] = [:]
+        for page in pages {
+            for case .paragraph(let paragraph) in page.blocks {
+                guard let size = paragraph.fontSize, size > 0 else { continue }
+                // Round to a quarter point so the same face lands in one bucket.
+                mass[(size * 4).rounded() / 4, default: 0] += paragraph.text.count
+            }
+        }
+        return mass.max { $0.value < $1.value }?.key
+    }
+
+    /// Demotes headings set smaller than the document's body text.
+    ///
+    /// Heading detection compares a candidate against the body size of its own
+    /// page, which is right almost everywhere and wrong exactly where it matters
+    /// most: on a page that is mostly figure, the labels *are* the majority of
+    /// the text, so the page's median collapses to 6.5pt and every axis label
+    /// looks like a heading. The document knows better than the page.
+    public static func demoteBelowBodySize(_ pages: [PageContent],
+                                           tolerance: Double = 1.02) -> [PageContent] {
+        guard let body = documentBodySize(pages), body > 0 else { return pages }
+        return pages.map { page in
+            var page = page
+            page.blocks = page.blocks.map { block in
+                guard case .heading(let heading) = block,
+                      let size = heading.fontSize, size > 0,
+                      size < body * tolerance else { return block }
+                // Numbering outranks size. Plenty of styles set a subsection at
+                // the body size, or a hair under it, and distinguish it only by
+                // its number — demoting those empties the outline of everything
+                // below the top level.
+                if sectionDepth(of: heading.text) != nil { return block }
+                return .paragraph(.init(text: heading.text, bbox: heading.bbox,
+                                        fontSize: heading.fontSize))
+            }
+            return page
+        }
     }
 
     /// Re-ranks heading levels across a whole document.

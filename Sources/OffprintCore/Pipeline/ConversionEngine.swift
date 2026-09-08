@@ -156,6 +156,7 @@ public actor ConversionEngine {
         // repeating in place across pages, and heading depth by comparing every
         // heading in the document rather than the ones on one page.
         pages = RunningContentFilter.strip(pages)
+        pages = HeadingHeuristic.demoteBelowBodySize(pages)
         pages = HeadingHeuristic.demoteBibliographyEntries(pages)
         pages = HeadingHeuristic.normalizeLevels(pages)
 
@@ -221,15 +222,30 @@ public actor ConversionEngine {
         }
         guard !tables.isEmpty else { return content }
 
+        // Splice each table in where the blocks it replaces were standing.
+        //
+        // Re-sorting the page by position instead would undo the column
+        // resolution the text layer already did and interleave the columns —
+        // section 4.2 at the foot of the left column ends up after section 5 in
+        // the right one.
         let claimed = tables.compactMap(\.bbox)
-        var blocks = content.blocks.filter { block in
-            guard let box = block.bbox else { return true }
-            return !claimed.contains { box.coverage(by: $0) > 0.5 }
+        var blocks: [Block] = []
+        var inserted = Set<Int>()
+        for block in content.blocks {
+            if let box = block.bbox,
+               let index = claimed.firstIndex(where: { box.coverage(by: $0) > 0.5 }) {
+                if inserted.insert(index).inserted { blocks.append(tables[index]) }
+                continue        // this block is part of the table now
+            }
+            blocks.append(block)
         }
-        blocks += tables
+        // Anything Vision found that replaced nothing still belongs on the page.
+        for (index, table) in tables.enumerated() where !inserted.contains(index) {
+            blocks.append(table)
+        }
 
         var content = content
-        content.blocks = ReadingOrder.sort(blocks, pageWidth: content.width) { $0.bbox }
+        content.blocks = blocks
         content.engine = .vision
         return content
     }
@@ -317,15 +333,21 @@ public actor ConversionEngine {
         var absorbed = Set<Int>()
         var envelopes: [BoundingBox] = regions.map(\.bbox)
         for index in envelopes.indices {
+            // Bounded growth. Unbounded, the envelope walks off down the page
+            // and swallows the section heading under the figure — "4.1 Dataset"
+            // disappeared from a paper this way.
+            let limit = regions[index].bbox.area * 2.2
             var changed = true
             while changed {
                 changed = false
-                let reach = envelopes[index].inset(by: -22)
+                let reach = envelopes[index].inset(by: -14)
                 for (blockIndex, block) in blocks.enumerated() where !absorbed.contains(blockIndex) {
                     guard let box = block.bbox, Self.isChartLettering(block),
                           box.coverage(by: reach) > 0.6 else { continue }
+                    let grown = envelopes[index].union(box)
+                    guard grown.area <= limit else { continue }
                     absorbed.insert(blockIndex)
-                    envelopes[index] = envelopes[index].union(box)
+                    envelopes[index] = grown
                     changed = true
                 }
             }
@@ -345,13 +367,30 @@ public actor ConversionEngine {
             let name = String(format: "p%03d-fig%02d.png", content.index + 1, n + 1)
             // Crop the grown envelope, so the exported image includes the axis
             // labels and legend rather than a bare plotting area.
-            blocks.append(.figure(.init(
+            let figure = Block.figure(.init(
                 path: "images/\(name)",
                 caption: Self.caption(near: envelope, in: content.blocks),
-                bbox: envelope
-            )))
+                bbox: envelope))
+            blocks = Self.splice(figure, at: envelope, into: blocks)
         }
-        return ReadingOrder.sort(blocks, pageWidth: content.width) { $0.bbox }
+        return blocks
+    }
+
+    /// Inserts a block ahead of the first block it precedes on the page.
+    ///
+    /// The list is already in reading order, and a position sort would destroy
+    /// that on a multi-column page, so placement is done by finding a neighbour
+    /// rather than by re-deriving the whole order.
+    static func splice(_ block: Block, at box: BoundingBox, into blocks: [Block]) -> [Block] {
+        let index = blocks.firstIndex { existing in
+            guard let other = existing.bbox else { return false }
+            // The first thing below it that shares its horizontal span.
+            let overlaps = min(box.maxX, other.maxX) - max(box.minX, other.minX) > 0
+            return overlaps && other.minY >= box.maxY
+        }
+        var blocks = blocks
+        blocks.insert(block, at: index ?? blocks.count)
+        return blocks
     }
 
     /// Whether a block reads as lettering inside a chart rather than prose.
@@ -368,7 +407,13 @@ public actor ConversionEngine {
         guard !text.isEmpty, text.count <= 90 else { return false }
         // A sentence is a caption, not a label.
         if text.hasSuffix(".") && text.split(separator: " ").count > 6 { return false }
-        return true
+        // A numbered section title is a heading standing next to the figure, not
+        // part of it. Absorbing one deletes it from the document outline.
+        if HeadingHeuristic.sectionDepth(of: text) != nil { return false }
+        // Lettering is labels and numbers; a title is words.
+        let words = text.split(separator: " ")
+        let hasSingleLetters = words.contains { $0.count == 1 && $0.first!.isLetter }
+        return HeadingHeuristic.looksLikeChartLabel(text) || hasSingleLetters || words.count <= 3
     }
 
     /// A short line of text directly beneath a figure is almost always its caption.

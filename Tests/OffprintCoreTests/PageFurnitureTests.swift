@@ -141,3 +141,98 @@ struct HeadingRejectionTests {
         #expect(!HeadingHeuristic.looksLikeCitation("Data availability"))
     }
 }
+
+@Suite("Body size and paragraph splitting")
+struct BodySizeTests {
+
+    func page(_ blocks: [Block]) -> PageContent {
+        PageContent(index: 0, width: 595, height: 790, blocks: blocks, engine: .textLayer)
+    }
+
+    @Test("Body size is the size most of the document's characters are set in")
+    func measuresByCharacterMass() {
+        // Counting blocks would let a figure page full of two-word labels
+        // outvote the body text.
+        let pages = [page([
+            .paragraph(.init(text: String(repeating: "a", count: 4000), fontSize: 8.2)),
+            .paragraph(.init(text: "x", fontSize: 6.5)),
+            .paragraph(.init(text: "y", fontSize: 6.5)),
+            .paragraph(.init(text: "z", fontSize: 6.5)),
+        ])]
+        #expect(HeadingHeuristic.documentBodySize(pages) == 8.25)
+    }
+
+    @Test("Headings smaller than body text are demoted")
+    func demotesSmallHeadings() {
+        // Chart labels on a figure-heavy page: the page's own median is 6.5, so
+        // they look like headings until the whole document is consulted.
+        let pages = [page([
+            .paragraph(.init(text: String(repeating: "a", count: 3000), fontSize: 8.2)),
+            .heading(.init(level: 3, text: "Publication year", fontSize: 6.5)),
+            .heading(.init(level: 2, text: "Results", fontSize: 10.8)),
+        ])]
+        let out = HeadingHeuristic.demoteBelowBodySize(pages)
+        #expect(out[0].blocks[1].typeName == "paragraph")
+        #expect(out[0].blocks[2].typeName == "heading")
+    }
+
+    @Test("A numbered subsection survives even at body size")
+    func keepsNumberedSubsections() {
+        // Plenty of styles set a subsection at the body size and distinguish it
+        // only by its number; demoting those empties the outline.
+        let pages = [page([
+            .paragraph(.init(text: String(repeating: "a", count: 3000), fontSize: 11.0)),
+            .heading(.init(level: 3, text: "4.1 Dataset", fontSize: 10.9)),
+        ])]
+        #expect(HeadingHeuristic.demoteBelowBodySize(pages)[0].blocks[1].typeName == "heading")
+    }
+
+    @Test("A section number does not make a title look like an axis label")
+    func ignoresSectionNumberInDigitRatio() {
+        // "4.1 Dataset" is 22% digits; measured on the title alone it is none.
+        #expect(!HeadingHeuristic.looksLikeChartLabel("4.1 Dataset"))
+        #expect(HeadingHeuristic.looksLikeChartLabel("Political science 0.5 27%"))
+    }
+
+    // MARK: - Paragraph splitting
+
+    func line(_ text: String, x: Double, y: Double, width: Double, size: Double)
+        -> TextLayerGeometry.Line {
+        .init(text: text, bbox: .init(x: x, y: y, width: width, height: size),
+              column: 0, fontSize: size)
+    }
+
+    @Test("A wrapped heading stays one paragraph despite its indent")
+    func keepsWrappedHeadingTogether() {
+        // The second line of a centred heading starts further right, which the
+        // indent rule reads as a new paragraph and cuts the title in half.
+        //
+        // Page context matters here and the test supplies it: "heading sized"
+        // only means anything relative to the body around it, so the run
+        // includes the body lines that set the page's measure.
+        var lines = (0..<6).map { index in
+            line("body text filling the whole measure of this column here",
+                 x: 306, y: 400 + Double(index) * 13, width: 219, size: 11)
+        }
+        lines.append(line("5 Evaluating Semantic Embedding", x: 306, y: 548, width: 185, size: 12))
+        lines.append(line("Capabilities", x: 325, y: 561, width: 60, size: 12))
+
+        let paragraphs = TextLayerGeometry.paragraphs(from: lines)
+        let title = paragraphs.last
+        #expect(title?.text == "5 Evaluating Semantic Embedding Capabilities")
+    }
+
+    @Test("A body-sized section title separates from the paragraph beneath it")
+    func splitsTitleFromBody() {
+        // Nothing but line length distinguishes them in this style, and merged
+        // the title stops being a heading at all.
+        let lines = [
+            line("5.1 Generalization to Longer Texts", x: 306, y: 583, width: 169, size: 10.9),
+            line("Since our model is trained exclusively on individual", x: 306, y: 596, width: 219, size: 10.9),
+            line("sentences, it is essential to evaluate its ability to", x: 306, y: 609, width: 219, size: 10.9),
+        ]
+        let paragraphs = TextLayerGeometry.paragraphs(from: lines)
+        #expect(paragraphs.count == 2)
+        #expect(paragraphs[0].text == "5.1 Generalization to Longer Texts")
+    }
+}

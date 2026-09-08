@@ -39,10 +39,17 @@ public enum Block: Codable, Sendable, Hashable {
         public var text: String
         public var bbox: BoundingBox?
         public var confidence: Double?
-        public init(text: String, bbox: BoundingBox? = nil, confidence: Double? = nil) {
+        /// Measured type size, when the engine could read one. Used to establish
+        /// the document's body size, which is what heading detection compares
+        /// against.
+        public var fontSize: Double?
+
+        public init(text: String, bbox: BoundingBox? = nil, confidence: Double? = nil,
+                    fontSize: Double? = nil) {
             self.text = text
             self.bbox = bbox
             self.confidence = confidence
+            self.fontSize = fontSize
         }
     }
 

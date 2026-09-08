@@ -153,12 +153,19 @@ public enum TextLayerGeometry {
                   raw.height > 0.5, raw.width >= 0,
                   raw.width < bounds.width else { continue }
             // Flip from PDF's bottom-left origin to Offprint's top-left origin.
-            glyphs.append(Glyph(box: BoundingBox(
+            let box = BoundingBox(
                 x: Double(raw.origin.x - bounds.origin.x),
                 y: Double(bounds.height) - Double(raw.origin.y - bounds.origin.y) - Double(raw.height),
                 width: Double(raw.width),
                 height: Double(raw.height)
-            )))
+            )
+            // Some documents draw past the paper and rely on clipping to hide
+            // it. Those glyphs are invisible, but their coordinates are not:
+            // they drag a block's box off the page, which then breaks reading
+            // order, figure crops and the boxes in the JSON export.
+            let visible = box.clamped(to: bounds.size)
+            guard visible.width > 0, visible.height > 0 else { continue }
+            glyphs.append(Glyph(box: visible))
         }
         return glyphs
     }

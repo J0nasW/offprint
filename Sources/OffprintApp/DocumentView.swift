@@ -139,13 +139,15 @@ struct BlockPreview: View {
     @ViewBuilder private func view(for block: Block, page: Int) -> some View {
         switch block {
         case .heading(let heading):
-            Text(heading.text)
+            Text(MathTypesetter.display(heading.text))
                 .font(.system(size: Self.size(forLevel: heading.level), weight: .semibold))
                 .padding(.top, heading.level <= 2 ? 10 : 4)
                 .textSelection(.enabled)
 
         case .paragraph(let paragraph):
-            Text(paragraph.text)
+            // Preview only. The export keeps real LaTeX, which is what a
+            // downstream renderer or model wants; on screen it is unreadable.
+            Text(MathTypesetter.display(paragraph.text))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -156,7 +158,7 @@ struct BlockPreview: View {
                         Text(list.ordered ? "\(index + 1)." : "•")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                        Text(item.text).textSelection(.enabled)
+                        Text(MathTypesetter.display(item.text)).textSelection(.enabled)
                     }
                     .padding(.leading, CGFloat(item.depth) * 18)
                 }
@@ -169,12 +171,11 @@ struct BlockPreview: View {
             FigureView(source: source, page: page, figure: figure)
 
         case .formula(let formula):
-            Text(formula.latex)
-                .font(.system(.body, design: .serif))
-                .italic()
-                .padding(8)
+            Text(MathTypesetter.unicode(formula.latex))
+                .font(.system(size: 17, design: .serif))
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
-                .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
+                .textSelection(.enabled)
 
         case .code(let code):
             Text(code.text)
@@ -214,7 +215,8 @@ struct TableBlockView: View {
                 ForEach(Array(grid.enumerated()), id: \.offset) { rowIndex, row in
                     HStack(spacing: 0) {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            Text(cell.replacingOccurrences(of: "<br>", with: "\n"))
+                            Text(MathTypesetter.display(
+                                cell.replacingOccurrences(of: "<br>", with: "\n")))
                                 .font(.callout)
                                 .fontWeight(rowIndex == 0 ? .semibold : .regular)
                                 .frame(maxWidth: .infinity, alignment: .leading)

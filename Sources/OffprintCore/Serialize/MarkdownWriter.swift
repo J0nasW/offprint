@@ -163,17 +163,10 @@ public struct MarkdownWriter: Sendable {
         // breaks the formula — and formulas are most of why a scientific paper
         // goes through a model at all.
         guard s.contains("$") else { return escapeOutsideMath(s) }
-        var out = ""
-        var rest = Substring(s)
-        while let open = rest.firstIndex(of: "$") {
-            let after = rest.index(after: open)
-            guard let close = rest[after...].firstIndex(of: "$") else { break }
-            out += escapeOutsideMath(String(rest[rest.startIndex..<open]))
-            out += String(rest[open...close])
-            rest = rest[rest.index(after: close)...]
-        }
-        out += escapeOutsideMath(String(rest))
-        return out
+        return MathTypesetter.spans(in: s).map { span in
+            span.isMath ? span.delimiter + span.text + span.delimiter
+                        : escapeOutsideMath(span.text)
+        }.joined()
     }
 
     static func escapeOutsideMath(_ s: String) -> String {

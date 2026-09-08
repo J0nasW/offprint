@@ -22,7 +22,7 @@ func parse() -> Arguments {
     var a = Arguments()
     var rest = Array(CommandLine.arguments.dropFirst())
     if let first = rest.first, !first.hasPrefix("-") ,
-       ["convert", "classify", "report", "lines"].contains(first) {
+       ["convert", "classify", "report", "lines", "math"].contains(first) {
         a.command = first
         rest.removeFirst()
     }
@@ -60,6 +60,7 @@ USAGE
   offprint-harness classify <pdf|dir>...  Show the per-page routing decision
   offprint-harness report   <pdf|dir>...  Timing and block-count table
   offprint-harness lines    <pdf>         Dump text-layer line geometry (debugging)
+  offprint-harness math     <pdf>         Show how the preview renders the maths it finds
 
 OPTIONS
   -t, --tier      Quality tier (default: fast)
@@ -104,13 +105,43 @@ func padLeft(_ s: String, _ n: Int) -> String {
 let args = parse()
 let pdfs = collectPDFs(args.paths)
 
-guard !pdfs.isEmpty else {
+guard !pdfs.isEmpty || args.command == "math" else {
     print(usage)
     FileHandle.standardError.write(Data("\nerror: no PDFs found\n".utf8))
     exit(1)
 }
 
 switch args.command {
+
+case "math":
+    // Reads Markdown as well as PDFs, because the maths comes from the model
+    // tiers and those live in the app rather than this tool.
+    let sources = args.paths.filter {
+        ["md", "markdown", "txt"].contains($0.pathExtension.lowercased())
+    }
+    var lines: [String] = []
+    for source in sources {
+        lines += ((try? String(contentsOf: source, encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+    }
+    for pdf in pdfs {
+        let engine = ConversionEngine()
+        guard let document = try? await engine.document(
+            for: pdf, options: .init(extractFigures: false,
+                                     pageRange: args.limit.map { 0..<$0 })) else { continue }
+        lines += document.allBlocks.map(\.plainText)
+    }
+
+    var shown = 0
+    for text in lines {
+        guard text.contains("$"), MathTypesetter.display(text) != text else { continue }
+        print("  raw     " + text.prefix(120))
+        print("  preview " + MathTypesetter.display(text).prefix(120))
+        print("")
+        shown += 1
+        if shown >= 6 { break }
+    }
+    if shown == 0 { print("no maths found") }
 
 case "lines":
     for pdf in pdfs {

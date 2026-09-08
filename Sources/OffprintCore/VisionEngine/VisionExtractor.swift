@@ -210,7 +210,11 @@ public struct VisionExtractor: Sendable {
     /// Offprint works in page points with an upper-left origin.
     static func rect(_ region: NormalizedRegion, _ pageSize: CGSize) -> BoundingBox {
         let r = region.boundingBox.toImageCoordinates(pageSize, origin: .upperLeft)
+        // Clipped to the paper. Vision occasionally reports a region reaching
+        // past the page edge, and a box starting at x = -226 throws off reading
+        // order, figure cropping and the coordinates in the JSON export.
         return BoundingBox(x: Double(r.origin.x), y: Double(r.origin.y),
                            width: Double(r.width), height: Double(r.height))
+            .clamped(to: pageSize)
     }
 }
